@@ -25,20 +25,17 @@ func (s *Storage) Withdraw(ctx context.Context, tokenID string, orderNum int64, 
 		}
 	}()
 
-	query := `SELECT SUM(COALESCE(accrual, 0)) FROM orders WHERE user_id = $1`
-
-	var currAccrual Numeric
-	row := tx.QueryRow(ctx, query, login.userID)
-	err = row.Scan(&currAccrual)
+	balance, err := s.GetBalance(ctx, tx, tokenID)
 	if err != nil {
 		return err
 	}
 
-	if currAccrual < sum {
+	logger.Sugar().Infof("Withdraw attempt: Balance: %s, Requested: %s", balance.Current, &sum)
+	if *balance.Current < sum {
 		return ErrWithdrawNotEnough
 	}
 
-	query = `INSERT INTO withdrawals (user_id, order_num, sum) VALUES ($1, $2, $3)`
+	query := `INSERT INTO withdrawals (user_id, order_num, sum) VALUES ($1, $2, $3)`
 	_, err = tx.Exec(ctx, query, login.userID, orderNum, sum)
 	if err != nil {
 		return err
@@ -91,7 +88,7 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, tokenID string) (Withd
 	return WithdrawalsInfo{Withdrawals: withdrawals}, nil
 }
 
-func (s *Storage) GetBalance(ctx context.Context, tokenID string) (BalanceInfo, error) {
+func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, tokenID string) (BalanceInfo, error) {
 
 	var login SessionInfo
 	var err error
@@ -100,15 +97,20 @@ func (s *Storage) GetBalance(ctx context.Context, tokenID string) (BalanceInfo, 
 	}
 
 	txOk := false
-	tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-	if err != nil {
-		return BalanceInfo{}, err
-	}
-	defer func() {
-		if !txOk {
-			tx.Rollback(ctx)
+	var tx pgx.Tx
+	if parentTx == nil {
+		tx, err = s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		if err != nil {
+			return BalanceInfo{}, err
 		}
-	}()
+		defer func() {
+			if !txOk {
+				tx.Rollback(ctx)
+			}
+		}()
+	} else {
+		tx, err = parentTx, nil
+	}
 
 	query := `SELECT SUM(COALESCE(accrual,0)) FROM orders	WHERE user_id = $1`
 
@@ -128,9 +130,11 @@ func (s *Storage) GetBalance(ctx context.Context, tokenID string) (BalanceInfo, 
 		return BalanceInfo{}, err
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return BalanceInfo{}, err
+	if parentTx == nil {
+		err = tx.Commit(ctx)
+		if err != nil {
+			return BalanceInfo{}, err
+		}
 	}
 	txOk = true
 

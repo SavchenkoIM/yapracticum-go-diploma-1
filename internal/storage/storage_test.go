@@ -53,31 +53,97 @@ func TestStorageTestSuite(t *testing.T) {
 	suite.Run(t, new(StorageTestSuite))
 }
 
-func (sts *StorageTestSuite) Test_storage_User() {
+func (sts *StorageTestSuite) Test_End_To_End() {
+
+	ctx := context.Background()
+
+	/////////////////////////////
+	// Login/Register
+	/////////////////////////////
 
 	sts.Run(`Login Unregistered User`, func() {
-		_, err := sts.TestStorager.UserLogin(context.Background(), "TestUser", "TestPassword")
+		_, err := sts.TestStorager.UserLogin(ctx, "TestUser", "TestPassword")
 		if err == nil {
 			sts.T().Errorf("User TestUser with passw TestPassword unexpectedly logged in")
 		}
 	})
 
 	sts.Run(`Register User`, func() {
-		if err := sts.TestStorager.UserRegister(context.Background(), "TestUser", "TestPassword"); err != nil {
+		if err := sts.TestStorager.UserRegister(ctx, "TestUser", "TestPassword"); err != nil {
 			sts.T().Errorf("Register user TestUser with passw TestPassword, error: %s", err.Error())
 		}
 	})
 
 	sts.Run(`Register User Second Time`, func() {
-		if err := sts.TestStorager.UserRegister(context.Background(), "TestUser", "TestPassword"); err == nil {
+		if err := sts.TestStorager.UserRegister(ctx, "TestUser", "TestPassword"); err == nil {
 			sts.T().Errorf("User TestUser unexpectedly got registered second time")
 		}
 	})
 
+	var err error
+	userID := ""
 	sts.Run(`Login Registered User`, func() {
-		_, err := sts.TestStorager.UserLogin(context.Background(), "TestUser", "TestPassword")
+		userID, err = sts.TestStorager.UserLogin(ctx, "TestUser", "TestPassword")
 		if err != nil {
 			sts.T().Errorf("Login user TestUser with passw TestPassword, error: %s", err.Error())
 		}
 	})
+
+	/////////////////////////////
+	// Add order
+	/////////////////////////////
+
+	sts.Run(`Add Correct Order`, func() {
+		err := sts.TestStorager.OrderAddNew(ctx, userID, 27815869)
+		if err != nil {
+			sts.T().Errorf("Failed to add correct order 27815869, Error: %s", err.Error())
+		}
+	})
+
+	/////////////////////////////
+	// Withdraw and check balance
+	/////////////////////////////
+
+	acc := Numeric(20050)
+	sts.Run(`Accrual Of 200.50 Bonus Points`, func() {
+		err := sts.TestStorager.ApplyAccrualResponse(ctx, AccrualResponse{Accrual: &acc, Status: "PROCESSED", Order: "27815869"})
+		if err != nil {
+			sts.T().Errorf("Failed to add correct order 27815869, Error: %s", err.Error())
+		}
+	})
+
+	sts.Run(`Check Balance`, func() {
+		balance, err := sts.TestStorager.GetBalance(ctx, nil, userID)
+		if err != nil {
+			sts.T().Errorf("Failed to check balance, Error: %s", err.Error())
+		}
+		if *balance.Current != 20050 {
+			sts.T().Errorf("Incorrect balance!, Want: %s, Actual: %s", &acc, balance.Current)
+		}
+	})
+
+	sts.Run(`Withdraw 100 Bonus Points`, func() {
+		err := sts.TestStorager.Withdraw(ctx, userID, 27815869, Numeric(10000))
+		if err != nil {
+			sts.T().Errorf("Failed to withdraw, Error: %s", err.Error())
+		}
+	})
+
+	sts.Run(`ReCheck Balance`, func() {
+		balance, err := sts.TestStorager.GetBalance(ctx, nil, userID)
+		if err != nil {
+			sts.T().Errorf("Failed to check balance, Error: %s", err.Error())
+		}
+		if *balance.Current != 10050 {
+			sts.T().Errorf("Incorrect balance!, Want: %s, Actual: %s", "100.50", balance.Current)
+		}
+	})
+
+	sts.Run(`Withdraw 150 Bonus Points`, func() {
+		err := sts.TestStorager.Withdraw(ctx, userID, 27815869, Numeric(15000))
+		if err == nil {
+			sts.T().Errorf("Unexpectedly withdrawed 150 bonus points")
+		}
+	})
+
 }
