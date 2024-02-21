@@ -11,13 +11,13 @@ func userCheckLoggedIn(w http.ResponseWriter, r *http.Request) (string, bool) {
 		logger.Info(err.Error())
 		return "", false
 	}
-	_, err = dbStorage.UserCheckLoggedIn(cSession.Value)
+	userID, err := dbStorage.UserCheckLoggedIn(cSession.Value)
 	if err != nil {
 		logger.Info(err.Error())
 		return "", false
 	}
 
-	return cSession.Value, true
+	return userID, true
 }
 
 func CustomAuth(exclude ...string) func(http.Handler) http.Handler {
@@ -30,12 +30,12 @@ func CustomAuth(exclude ...string) func(http.Handler) http.Handler {
 				}
 			}
 
-			tokenID, loggedIn := userCheckLoggedIn(w, r)
+			userID, loggedIn := userCheckLoggedIn(w, r)
 			if !loggedIn {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			r.Header.Set("LoggedUserID", tokenID)
+			r.Header.Set("LoggedUserID", userID)
 
 			h.ServeHTTP(w, r)
 		})

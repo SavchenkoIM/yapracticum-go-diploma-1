@@ -25,14 +25,14 @@ var cfg config.Config
 var logger *zap.Logger
 
 type Storage struct {
-	dbConn      *pgxpool.Pool
-	connString  string
-	sessionInfo *SessionInfoMap
-	encKey      string
+	dbConn     *pgxpool.Pool
+	connString string
+	//sessionInfo *SessionInfoMap
+	encKey string
 }
 
 func New(connString string) *Storage {
-	return &Storage{connString: connString, sessionInfo: NewSessionInfoMap()}
+	return &Storage{connString: connString} //, sessionInfo: NewSessionInfoMap()}
 }
 
 func (s *Storage) Init(ctx context.Context, loger *zap.Logger, config config.Config) error {

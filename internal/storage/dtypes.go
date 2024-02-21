@@ -8,14 +8,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
 type Storager interface {
 	UserRegister(context.Context, string, string) error
 	UserLogin(context.Context, string, string) (string, error)
-	UserCheckLoggedIn(string) (SessionInfo, error)
+	UserCheckLoggedIn(string) (string, error)
 	OrderAddNew(context.Context, string, int) error
 	GetOrdersData(context.Context, string) (OrdersInfo, error)
 	GetUnhandledOrders(context.Context) (OrdersInfo, error)
@@ -23,56 +22,6 @@ type Storager interface {
 	GetWithdrawalsData(context.Context, string) (WithdrawalsInfo, error)
 	GetBalance(context.Context, pgx.Tx, string) (BalanceInfo, error)
 	ApplyAccrualResponse(context.Context, AccrualResponse) error
-}
-
-//////////////////////////
-// SessionInfo
-//////////////////////////
-
-var sessionInactiveTime time.Duration = 5 * time.Minute
-
-type SessionInfo struct {
-	UserName string
-	userID   string
-	expiry   time.Time
-}
-
-func (s SessionInfo) isExpired() bool {
-	return s.expiry.Before(time.Now())
-}
-
-type SessionTokenData struct {
-	TokenID string
-	Expiry  time.Time
-}
-
-//////////////////////////
-// SessionInfoMap
-//////////////////////////
-
-type SessionInfoMap struct {
-	data  map[string]SessionInfo
-	mutex sync.RWMutex
-}
-
-func NewSessionInfoMap() *SessionInfoMap {
-	return &SessionInfoMap{data: make(map[string]SessionInfo)}
-}
-func (sim *SessionInfoMap) Set(key string, value SessionInfo) {
-	sim.mutex.Lock()
-	defer sim.mutex.Unlock()
-	sim.data[key] = value
-}
-func (sim *SessionInfoMap) Delete(key string) {
-	sim.mutex.Lock()
-	defer sim.mutex.Unlock()
-	delete(sim.data, key)
-}
-func (sim *SessionInfoMap) Get(key string) (SessionInfo, bool) {
-	sim.mutex.RLock()
-	defer sim.mutex.RUnlock()
-	val, ok := sim.data[key]
-	return val, ok
 }
 
 //////////////////////////

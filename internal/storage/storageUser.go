@@ -8,7 +8,6 @@ import (
 	"golang.org/x/crypto/scrypt"
 	"io"
 	"strings"
-	"time"
 )
 
 func (s *Storage) UserRegister(ctx context.Context, login string, password string) error {
@@ -35,28 +34,14 @@ func (s *Storage) UserRegister(ctx context.Context, login string, password strin
 	return nil
 }
 
-func (s *Storage) UserCheckLoggedIn(token string) (SessionInfo, error) {
+func (s *Storage) UserCheckLoggedIn(token string) (string, error) {
 	ac := AuthClaims{}
 	err := ac.SetFromJWT(token, s.encKey)
 	if err != nil {
-		return SessionInfo{}, err
+		return "", err
 	}
 
-	userSession, exists := s.sessionInfo.Get(ac.UserID)
-	if !exists {
-		return SessionInfo{}, ErrUserNotLoggedIn
-	}
-	if userSession.isExpired() {
-		s.sessionInfo.Delete(ac.UserID)
-		return SessionInfo{}, ErrUserNotLoggedIn
-	}
-
-	expTime := time.Now().Add(sessionInactiveTime)
-	s.sessionInfo.Set(ac.UserID, SessionInfo{
-		UserName: userSession.UserName,
-		userID:   ac.UserID,
-		expiry:   expTime})
-	return userSession, nil
+	return ac.UserID, nil
 }
 
 func (s *Storage) UserLogin(ctx context.Context, login string, password string) (string, error) {
@@ -84,12 +69,6 @@ func (s *Storage) UserLogin(ctx context.Context, login string, password string) 
 	if hex.EncodeToString(key) != sPassw {
 		return "", ErrUserAuthFailed
 	}
-
-	s.sessionInfo.Set(sUserID, SessionInfo{
-		UserName: login,
-		userID:   sUserID,
-		expiry:   time.Now().Add(sessionInactiveTime),
-	})
 
 	ac := AuthClaims{UserID: sUserID}
 	jwt, err := ac.GetJWT(s.encKey)

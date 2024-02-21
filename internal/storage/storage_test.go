@@ -81,11 +81,17 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 	})
 
 	var err error
+	token := ""
 	userID := ""
 	sts.Run(`Login Registered User`, func() {
-		userID, err = sts.TestStorager.UserLogin(ctx, "TestUser", "TestPassword")
+		token, err = sts.TestStorager.UserLogin(ctx, "TestUser", "TestPassword")
 		if err != nil {
 			sts.T().Errorf("Login user TestUser with passw TestPassword, error: %s", err.Error())
+		}
+
+		userID, err = sts.TestStorager.UserCheckLoggedIn(token)
+		if err != nil {
+			sts.T().Errorf("User token verification, error: %s", err.Error())
 		}
 	})
 

@@ -11,20 +11,16 @@ import (
 	"time"
 )
 
-func (s *Storage) OrderAddNew(ctx context.Context, tokenID string, orderNum int) error {
-	login, err := s.UserCheckLoggedIn(tokenID)
-	if err != nil {
-		return ErrUserNotLoggedIn
-	}
-
+func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum int) error {
+	var err error
 	query := `INSERT INTO orders (user_id, order_num) VALUES ($1, $2)`
 
-	_, err = s.dbConn.Exec(ctx, query, login.userID, orderNum)
+	_, err = s.dbConn.Exec(ctx, query, userID, orderNum)
 	if err != nil {
 		fmt.Println(err.Error())
 		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
 
-			if s.GetOrderOwner(ctx, orderNum) != login.userID {
+			if s.GetOrderOwner(ctx, orderNum) != userID {
 				logger.Sugar().Errorf("Order %d belongs to other user", orderNum)
 				return fmt.Errorf("%s: %w", err.Error(), ErrOrderOtherUser)
 			}
@@ -39,32 +35,22 @@ func (s *Storage) OrderAddNew(ctx context.Context, tokenID string, orderNum int)
 	return nil
 }
 
-func (s *Storage) GetOrdersData(ctx context.Context, tokenID string) (OrdersInfo, error) {
-	return s.getOrdersByCondition(ctx, tokenID, OrdersRequestByUser)
+func (s *Storage) GetOrdersData(ctx context.Context, userID string) (OrdersInfo, error) {
+	return s.getOrdersByCondition(ctx, userID, OrdersRequestByUser)
 }
 
 func (s *Storage) GetUnhandledOrders(ctx context.Context) (OrdersInfo, error) {
 	return s.getOrdersByCondition(ctx, "", OrdersRequestByStatusUnhandled)
 }
 
-func (s *Storage) getOrdersByCondition(ctx context.Context, tokenID string, condition int) (OrdersInfo, error) {
-	var (
-		login SessionInfo
-		err   error
-	)
-	if condition == OrdersRequestByUser {
-		login, err = s.UserCheckLoggedIn(tokenID)
-		if err != nil {
-			return OrdersInfo{}, ErrUserNotLoggedIn
-		}
-	}
-
+func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condition int) (OrdersInfo, error) {
+	var err error
 	var rows pgx.Rows
 	var query string
 	switch condition {
 	case OrdersRequestByUser:
 		query = `SELECT order_num, status, accrual, uploaded_at FROM orders WHERE user_id = $1`
-		rows, err = s.dbConn.Query(ctx, query, login.userID)
+		rows, err = s.dbConn.Query(ctx, query, userID)
 	case OrdersRequestByStatusUnhandled:
 		query = `SELECT order_num, status, accrual, uploaded_at FROM orders	WHERE status NOT IN ($1, $2)`
 		rows, err = s.dbConn.Query(ctx, query, StatusInvalid, StatusProcessed)

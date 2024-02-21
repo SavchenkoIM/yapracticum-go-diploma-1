@@ -166,7 +166,7 @@ func UserCheckLoggedInHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Not logged in"))
 		return
 	}
-	w.Write([]byte(fmt.Sprintf("Logged user: %s", login.UserName)))
+	w.Write([]byte(fmt.Sprintf("Logged userID: %s", login)))
 }
 
 func OrderGetList(w http.ResponseWriter, r *http.Request) {

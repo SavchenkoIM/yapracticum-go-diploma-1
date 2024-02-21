@@ -7,12 +7,7 @@ import (
 	"time"
 )
 
-func (s *Storage) Withdraw(ctx context.Context, tokenID string, orderNum int64, sum Numeric) error {
-	var login SessionInfo
-	var err error
-	if login, err = s.UserCheckLoggedIn(tokenID); err != nil {
-		return err
-	}
+func (s *Storage) Withdraw(ctx context.Context, userID string, orderNum int64, sum Numeric) error {
 
 	txOk := false
 	tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
@@ -25,7 +20,7 @@ func (s *Storage) Withdraw(ctx context.Context, tokenID string, orderNum int64, 
 		}
 	}()
 
-	balance, err := s.GetBalance(ctx, tx, tokenID)
+	balance, err := s.GetBalance(ctx, tx, userID)
 	if err != nil {
 		return err
 	}
@@ -36,7 +31,7 @@ func (s *Storage) Withdraw(ctx context.Context, tokenID string, orderNum int64, 
 	}
 
 	query := `INSERT INTO withdrawals (user_id, order_num, sum) VALUES ($1, $2, $3)`
-	_, err = tx.Exec(ctx, query, login.userID, orderNum, sum)
+	_, err = tx.Exec(ctx, query, userID, orderNum, sum)
 	if err != nil {
 		return err
 	}
@@ -50,19 +45,12 @@ func (s *Storage) Withdraw(ctx context.Context, tokenID string, orderNum int64, 
 	return nil
 }
 
-func (s *Storage) GetWithdrawalsData(ctx context.Context, tokenID string) (WithdrawalsInfo, error) {
-	var (
-		login SessionInfo
-		err   error
-	)
-	login, err = s.UserCheckLoggedIn(tokenID)
-	if err != nil {
-		return WithdrawalsInfo{}, ErrUserNotLoggedIn
-	}
+func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (WithdrawalsInfo, error) {
 
 	var rows pgx.Rows
+	var err error
 	query := `SELECT order_num, sum, processed_at FROM withdrawals WHERE user_id = $1`
-	rows, err = s.dbConn.Query(ctx, query, login.userID)
+	rows, err = s.dbConn.Query(ctx, query, userID)
 
 	if err != nil {
 		logger.Sugar().Errorf(err.Error())
@@ -88,15 +76,10 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, tokenID string) (Withd
 	return WithdrawalsInfo{Withdrawals: withdrawals}, nil
 }
 
-func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, tokenID string) (BalanceInfo, error) {
-
-	var login SessionInfo
-	var err error
-	if login, err = s.UserCheckLoggedIn(tokenID); err != nil {
-		return BalanceInfo{}, err
-	}
+func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, userID string) (BalanceInfo, error) {
 
 	txOk := false
+	var err error
 	var tx pgx.Tx
 	if parentTx == nil {
 		tx, err = s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
@@ -115,7 +98,7 @@ func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, tokenID strin
 	query := `SELECT SUM(COALESCE(accrual,0)) FROM orders	WHERE user_id = $1`
 
 	var currAccrual int64
-	row := tx.QueryRow(ctx, query, login.userID)
+	row := tx.QueryRow(ctx, query, userID)
 	err = row.Scan(&currAccrual)
 	if err != nil {
 		return BalanceInfo{}, err
@@ -124,7 +107,7 @@ func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, tokenID strin
 	query = `SELECT COALESCE(SUM(sum),0) FROM withdrawals WHERE user_id = $1`
 
 	var withdrawn int64 = 0
-	row = tx.QueryRow(ctx, query, login.userID)
+	row = tx.QueryRow(ctx, query, userID)
 	err = row.Scan(&withdrawn)
 	if err != nil {
 		return BalanceInfo{}, err
