@@ -45,7 +45,7 @@ func Router() chi.Router {
 }
 
 func main() {
-	parentContext := context.Background()
+	parentContext, cancel := context.WithCancel(context.Background())
 
 	var err error
 	if logger, err = zap.NewProduction(); err != nil {
@@ -53,28 +53,30 @@ func main() {
 	}
 
 	cfg := config.New()
-	dbStorage = storage.New(cfg, logger)
-	if err = dbStorage.Init(parentContext); err != nil {
-		logger.Error(err.Error())
-		return
+	dbStorage, err = storage.New(cfg, logger)
+	if err != nil {
+		panic(err.Error())
 	}
+
+	dbStorage.Init(parentContext)
 
 	handlers.Init(logger, dbStorage, cfg)
 
 	server := http.Server{Addr: cfg.Endpoint, Handler: Router()}
 
-	go shutdownSignal(parentContext, &server)
+	go shutdownSignal(parentContext, cancel, &server)
 
 	if err := server.ListenAndServe(); err != nil {
 		logger.Error(err.Error())
 	}
 }
 
-func shutdownSignal(ctx context.Context, server *http.Server) {
+func shutdownSignal(ctx context.Context, cancel context.CancelFunc, server *http.Server) {
 	terminateSignals := make(chan os.Signal, 1)
 	signal.Notify(terminateSignals, syscall.SIGTERM, syscall.SIGINT)
 	s := <-terminateSignals
 	logger.Info("Got one of stop signals, shutting down server gracefully, SIGNAL NAME :" + s.String())
+	cancel()
 	dbStorage.Close(ctx)
 	server.Shutdown(ctx)
 }

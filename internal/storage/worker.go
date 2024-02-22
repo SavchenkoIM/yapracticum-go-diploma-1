@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"net/http"
-	"time"
+	"strconv"
 )
 
 func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResponse) error {
@@ -67,17 +67,38 @@ func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResp
 }
 
 func (s *Storage) NewOrdersRefresher(ctx context.Context) {
+	mainLoopContextManager := NewCtxCancellWaiter(ctx, "NewOrdersRefresher", s.logger, 15)
+	innerLoopContextManager := NewCtxCancellWaiter(ctx, "NewOrdersRefresher", s.logger, 0)
 
 	for {
-
-		time.Sleep(3 * time.Second)
+		// Wait 15 sec between scans. Monitoring context each second.
+		scan, err := mainLoopContextManager.Scan()
+		if err != nil {
+			return
+		}
+		if !scan {
+			continue
+		}
 
 		orders, err := s.GetUnhandledOrders(ctx)
 		if err != nil {
 			continue
 		}
 
+		innerLoopContextManager.SetSkipSeconds(0)
 		for _, order := range orders.Orders {
+
+			for {
+				scan, err := innerLoopContextManager.Scan()
+				if err != nil {
+					return
+				}
+				if scan {
+					break
+				}
+			}
+			innerLoopContextManager.SetSkipSeconds(0)
+
 			s.logger.Info(fmt.Sprintf("Accrual Request: %s/api/orders/%s", s.config.AccrualAddress, order.Number))
 
 			resp, err := http.Get(fmt.Sprintf("%s/api/orders/%s", s.config.AccrualAddress, order.Number))
@@ -91,15 +112,26 @@ func (s *Storage) NewOrdersRefresher(ctx context.Context) {
 
 			s.logger.Info(fmt.Sprintf("Accrual Response: %s, Status: %d", string(respData), resp.StatusCode))
 
-			var respParsed AccrualResponse
-			err = json.Unmarshal(respData, &respParsed)
-			if err != nil {
-				continue
-			}
+			switch resp.StatusCode {
+			case http.StatusOK:
+				var respParsed AccrualResponse
+				err = json.Unmarshal(respData, &respParsed)
+				if err != nil {
+					continue
+				}
 
-			err = s.ApplyAccrualResponse(ctx, respParsed)
-			if err != nil {
-				s.logger.Error(err.Error())
+				err = s.ApplyAccrualResponse(ctx, respParsed)
+				if err != nil {
+					s.logger.Error(err.Error())
+				}
+
+			case http.StatusTooManyRequests:
+				raHeader := resp.Header.Get("Retry-After")
+				retryTime, err := strconv.Atoi(raHeader)
+				if err != nil {
+					retryTime = 10
+				}
+				innerLoopContextManager.SetSkipSeconds(retryTime)
 			}
 		}
 	}
