@@ -10,7 +10,7 @@ import (
 func (s *Storage) Withdraw(ctx context.Context, userID string, orderNum int64, sum Numeric) error {
 
 	txOk := false
-	tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}
@@ -20,20 +20,18 @@ func (s *Storage) Withdraw(ctx context.Context, userID string, orderNum int64, s
 		}
 	}()
 
-	balance, err := s.GetBalance(ctx, tx, userID)
-	if err != nil {
-		return err
-	}
-
-	logger.Sugar().Infof("Withdraw attempt: Balance: %s, Requested: %s", balance.Current, &sum)
-	if *balance.Current < sum {
-		return ErrWithdrawNotEnough
-	}
+	s.logger.Sugar().Infof("Withdraw attempt: Requested: %s", &sum)
 
 	query := `INSERT INTO withdrawals (user_id, order_num, sum) VALUES ($1, $2, $3)`
 	_, err = tx.Exec(ctx, query, userID, orderNum, sum)
 	if err != nil {
 		return err
+	}
+
+	query = "UPDATE users SET balance = balance - $2, withdrawn = withdrawn + $2 WHERE id = $1"
+	_, err = tx.Exec(ctx, query, userID, sum)
+	if err != nil {
+		return ErrWithdrawNotEnough
 	}
 
 	err = tx.Commit(ctx)
@@ -53,7 +51,7 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (Withdr
 	rows, err = s.dbConn.Query(ctx, query, userID)
 
 	if err != nil {
-		logger.Sugar().Errorf(err.Error())
+		s.logger.Sugar().Errorf(err.Error())
 		return WithdrawalsInfo{}, err
 	}
 
@@ -67,7 +65,7 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (Withdr
 	for rows.Next() {
 		err := rows.Scan(&oNumber, &oSum, &oUploadedAt)
 		if err != nil {
-			logger.Sugar().Errorf("Query %s, %s", query, err.Error())
+			s.logger.Sugar().Errorf("Query %s, %s", query, err.Error())
 			return WithdrawalsInfo{}, err
 		}
 		withdrawals = append(withdrawals, WithdrawalInfo{Order: strconv.FormatInt(oNumber, 10), Sum: &oSum, ProcessedAt: RFC3339Time(oUploadedAt)})
@@ -76,53 +74,18 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (Withdr
 	return WithdrawalsInfo{Withdrawals: withdrawals}, nil
 }
 
-func (s *Storage) GetBalance(ctx context.Context, parentTx pgx.Tx, userID string) (BalanceInfo, error) {
-
-	txOk := false
-	var err error
-	var tx pgx.Tx
-	if parentTx == nil {
-		tx, err = s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-		if err != nil {
-			return BalanceInfo{}, err
-		}
-		defer func() {
-			if !txOk {
-				tx.Rollback(ctx)
-			}
-		}()
-	} else {
-		tx, err = parentTx, nil
-	}
-
-	query := `SELECT SUM(COALESCE(accrual,0)) FROM orders	WHERE user_id = $1`
-
-	var currAccrual int64
-	row := tx.QueryRow(ctx, query, userID)
-	err = row.Scan(&currAccrual)
+func (s *Storage) GetBalance(ctx context.Context, userID string) (BalanceInfo, error) {
+	query := "SELECT balance, withdrawn FROM users WHERE id = $1"
+	row := s.dbConn.QueryRow(ctx, query, userID)
+	var balance int64
+	var withdraw int64
+	err := row.Scan(&balance, &withdraw)
 	if err != nil {
 		return BalanceInfo{}, err
 	}
 
-	query = `SELECT COALESCE(SUM(sum),0) FROM withdrawals WHERE user_id = $1`
-
-	var withdrawn int64 = 0
-	row = tx.QueryRow(ctx, query, userID)
-	err = row.Scan(&withdrawn)
-	if err != nil {
-		return BalanceInfo{}, err
-	}
-
-	if parentTx == nil {
-		err = tx.Commit(ctx)
-		if err != nil {
-			return BalanceInfo{}, err
-		}
-	}
-	txOk = true
-
-	curr := Numeric(currAccrual - withdrawn)
-	with := Numeric(withdrawn)
-	logger.Sugar().Infof("Balance: %s, withdrawn: %s", &curr, &with)
+	curr := Numeric(balance)
+	with := Numeric(withdraw)
+	s.logger.Sugar().Infof("Balance: %s, withdrawn: %s", &curr, &with)
 	return BalanceInfo{Current: &curr, Withdrawn: &with}, nil
 }

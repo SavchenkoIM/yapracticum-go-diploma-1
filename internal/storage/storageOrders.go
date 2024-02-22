@@ -21,14 +21,14 @@ func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum int) 
 		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
 
 			if s.GetOrderOwner(ctx, orderNum) != userID {
-				logger.Sugar().Errorf("Order %d belongs to other user", orderNum)
+				s.logger.Sugar().Errorf("Order %d belongs to other user", orderNum)
 				return fmt.Errorf("%s: %w", err.Error(), ErrOrderOtherUser)
 			}
 
-			logger.Sugar().Errorf("Order %d already exists in database", orderNum)
+			s.logger.Sugar().Errorf("Order %d already exists in database", orderNum)
 			return fmt.Errorf("%s: %w", err.Error(), ErrOrderAlreadyExists)
 		}
-		logger.Sugar().Errorf(err.Error())
+		s.logger.Sugar().Errorf(err.Error())
 		return err
 	}
 
@@ -59,7 +59,7 @@ func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condi
 	}
 
 	if err != nil {
-		logger.Sugar().Errorf(err.Error())
+		s.logger.Sugar().Errorf(err.Error())
 		return OrdersInfo{}, err
 	}
 
@@ -75,7 +75,7 @@ func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condi
 	for rows.Next() {
 		err := rows.Scan(&oNumber, &oStatus, &oAccrual, &oUploadedAt)
 		if err != nil {
-			logger.Sugar().Errorf("Query: %s, %s", query, err.Error())
+			s.logger.Sugar().Errorf("Query: %s, %s", query, err.Error())
 			return OrdersInfo{}, err
 		}
 		accr := Numeric(oAccrual.Int64)

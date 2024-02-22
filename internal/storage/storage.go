@@ -21,34 +21,30 @@ var ErrOrderAlreadyExists error = errors.New("this order already exists in datab
 var ErrOrderOtherUser error = errors.New("this order belongs to other user")
 var ErrWithdrawNotEnough error = errors.New("hot enough bonus points")
 
-var cfg config.Config
-var logger *zap.Logger
+//var cfg config.Config
 
 type Storage struct {
-	dbConn     *pgxpool.Pool
-	connString string
-	//sessionInfo *SessionInfoMap
+	dbConn *pgxpool.Pool
+	config config.Config
 	encKey string
+	logger *zap.Logger
 }
 
-func New(connString string) *Storage {
-	return &Storage{connString: connString} //, sessionInfo: NewSessionInfoMap()}
+func New(config config.Config, logger *zap.Logger) *Storage {
+	return &Storage{config: config, logger: logger}
 }
 
-func (s *Storage) Init(ctx context.Context, loger *zap.Logger, config config.Config) error {
+func (s *Storage) Init(ctx context.Context) error {
 	var err error
 
-	logger = loger
-	cfg = config
-
-	poolConfig, err := pgxpool.ParseConfig(s.connString)
+	poolConfig, err := pgxpool.ParseConfig(s.config.ConnString)
 	if err != nil {
-		logger.Sugar().Errorf("Unable to parse connection string: %s", err)
+		s.logger.Sugar().Errorf("Unable to parse connection string: %s", err)
 		return err
 	}
 	s.dbConn, err = pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		logger.Sugar().Errorf("Unable to create connection pool: %s", err)
+		s.logger.Sugar().Errorf("Unable to create connection pool: %s", err)
 		return err
 	}
 

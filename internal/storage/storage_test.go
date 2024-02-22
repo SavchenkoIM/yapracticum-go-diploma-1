@@ -26,13 +26,13 @@ func (sts *StorageTestSuite) SetupTest() {
 
 	storageContainer := testhelpers.NewTestDatabase(sts.T())
 
-	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(sts.T()))
+	//connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(sts.T()))
+	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", "localhost", 5432)
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	store := New(connstring)
-	err = store.Init(context.Background(), logger, config.Config{
-		ConnString: connstring})
+	store := New(config.Config{ConnString: connstring}, logger)
+	err = store.Init(context.Background())
 	require.NoError(sts.T(), err)
 
 	sts.TestStorager = store
@@ -119,7 +119,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 	})
 
 	sts.Run(`Check Balance`, func() {
-		balance, err := sts.TestStorager.GetBalance(ctx, nil, userID)
+		balance, err := sts.TestStorager.GetBalance(ctx, userID)
 		if err != nil {
 			sts.T().Errorf("Failed to check balance, Error: %s", err.Error())
 		}
@@ -135,8 +135,17 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 		}
 	})
 
+	data, err := sts.TestStorager.GetWithdrawalsData(ctx, userID)
+	if err != nil {
+		return
+	}
+	sts.T().Log(len(data.Withdrawals))
+	for _, v := range data.Withdrawals {
+		sts.T().Log(v)
+	}
+
 	sts.Run(`ReCheck Balance`, func() {
-		balance, err := sts.TestStorager.GetBalance(ctx, nil, userID)
+		balance, err := sts.TestStorager.GetBalance(ctx, userID)
 		if err != nil {
 			sts.T().Errorf("Failed to check balance, Error: %s", err.Error())
 		}
@@ -151,5 +160,13 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 			sts.T().Errorf("Unexpectedly withdrawed 150 bonus points")
 		}
 	})
+
+	data, err = sts.TestStorager.GetWithdrawalsData(ctx, userID)
+	if err != nil {
+		return
+	}
+	for _, v := range data.Withdrawals {
+		sts.T().Log(v)
+	}
 
 }

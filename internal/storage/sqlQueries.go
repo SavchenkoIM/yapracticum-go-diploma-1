@@ -6,8 +6,12 @@ var queryCreateUsers string = `CREATE TABLE IF NOT EXISTS public.users
     login text NOT NULL,
     password text NOT NULL,
     salt text NOT NULL,
+	balance bigint NOT NULL DEFAULT 0, 
+	withdrawn bigint NOT NULL DEFAULT 0, 
     PRIMARY KEY (id),
-    CONSTRAINT uk_login UNIQUE (login)
+    CONSTRAINT uk_login UNIQUE (login),
+	CONSTRAINT chk_balance_not_negative CHECK(balance >= 0),
+	CONSTRAINT chk_withdrawn_not_negative CHECK(withdrawn >= 0)
 )
 WITH (
     OIDS = FALSE

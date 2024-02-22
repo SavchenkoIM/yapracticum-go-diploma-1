@@ -53,8 +53,8 @@ func main() {
 	}
 
 	cfg := config.New()
-	dbStorage = storage.New(cfg.ConnString)
-	if err = dbStorage.Init(parentContext, logger, cfg); err != nil {
+	dbStorage = storage.New(cfg, logger)
+	if err = dbStorage.Init(parentContext); err != nil {
 		logger.Error(err.Error())
 		return
 	}

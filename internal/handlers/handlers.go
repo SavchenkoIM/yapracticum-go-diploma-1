@@ -36,7 +36,7 @@ func Init(pLogger *zap.Logger, pStorage *storage.Storage, config config.Config) 
 
 func GetBalance(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
-	balance, err := dbStorage.GetBalance(r.Context(), nil, tokenID)
+	balance, err := dbStorage.GetBalance(r.Context(), tokenID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))

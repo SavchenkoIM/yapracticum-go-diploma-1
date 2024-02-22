@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"regexp"
 	"strconv"
 	"strings"
@@ -20,7 +19,7 @@ type Storager interface {
 	GetUnhandledOrders(context.Context) (OrdersInfo, error)
 	Withdraw(context.Context, string, int64, Numeric) error
 	GetWithdrawalsData(context.Context, string) (WithdrawalsInfo, error)
-	GetBalance(context.Context, pgx.Tx, string) (BalanceInfo, error)
+	GetBalance(context.Context, string) (BalanceInfo, error)
 	ApplyAccrualResponse(context.Context, AccrualResponse) error
 }
 

@@ -25,7 +25,7 @@ func (s *Storage) UserRegister(ctx context.Context, login string, password strin
 
 	if _, err = s.dbConn.Exec(ctx, query, login, hex.EncodeToString(hash), hex.EncodeToString(salt)); err != nil {
 		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
-			logger.Sugar().Errorf("Login %s already exists in database", login)
+			s.logger.Sugar().Errorf("Login %s already exists in database", login)
 			return fmt.Errorf("%s: %w", err.Error(), ErrUserAlreadyExists)
 		}
 		return err
