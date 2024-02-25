@@ -31,7 +31,12 @@ func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum strin
 		return err
 	}
 
-	s.newOrdersCh <- orderNum
+	select {
+	case s.newOrdersCh <- OrderTag{OrderNum: orderNum, PollAfter: time.Now()}:
+	default:
+		s.logger.Sugar().Warnf("Order %s processing is delayed due to high load", orderNum)
+	}
+
 	return nil
 }
 

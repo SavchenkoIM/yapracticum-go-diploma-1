@@ -23,6 +23,11 @@ type Storager interface {
 	ApplyAccrualResponse(context.Context, AccrualResponse) error
 }
 
+type OrderTag struct {
+	OrderNum  string
+	PollAfter time.Time
+}
+
 //////////////////////////
 // Numeric: int64 with two last significant digits as "currency cents"
 //////////////////////////

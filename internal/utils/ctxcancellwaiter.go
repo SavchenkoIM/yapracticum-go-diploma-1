@@ -24,7 +24,7 @@ func (st *SafeTime) Set(val time.Time) {
 	st.time = val
 }
 
-type CtxCancellWaiter struct {
+type CtxCancelWaiter struct {
 	waitUntil  SafeTime
 	interval   time.Duration
 	Ctx        context.Context
@@ -32,13 +32,13 @@ type CtxCancellWaiter struct {
 	logger     *zap.Logger
 }
 
-func NewCtxCancellWaiter(ctx context.Context, interval time.Duration) *CtxCancellWaiter {
-	return &CtxCancellWaiter{Ctx: ctx,
+func NewCtxCancelWaiter(ctx context.Context, interval time.Duration) *CtxCancelWaiter {
+	return &CtxCancelWaiter{Ctx: ctx,
 		interval:  interval,
 		waitUntil: SafeTime{time: time.Now()}}
 }
 
-func (ccw *CtxCancellWaiter) Scan() error {
+func (ccw *CtxCancelWaiter) Scan() error {
 	var tUntil time.Time
 	for {
 		time.Sleep(50 * time.Millisecond)
@@ -57,6 +57,6 @@ func (ccw *CtxCancellWaiter) Scan() error {
 	}
 }
 
-func (ccw *CtxCancellWaiter) SetTimeUntil(time time.Time) {
+func (ccw *CtxCancelWaiter) SetTimeUntil(time time.Time) {
 	ccw.waitUntil.Set(time)
 }

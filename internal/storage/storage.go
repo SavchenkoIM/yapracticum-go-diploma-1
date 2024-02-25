@@ -33,10 +33,10 @@ type Storage struct {
 	workersWg   *sync.WaitGroup    // WaitGroup for Storage Workers
 	stopWorkers context.CancelFunc // Cancel function for Storage Workers Context
 	workersCtx  context.Context    // Storage Workers Context
-	newOrdersCh chan string        // Channel for orders to be processed
+	newOrdersCh chan OrderTag      // Channel for orders to be processed
 }
 
-func New(config config.Config, logger *zap.Logger, newOrdersCh chan string) (*Storage, error) {
+func New(config config.Config, logger *zap.Logger, newOrdersCh chan OrderTag) (*Storage, error) {
 	encKey := make([]byte, 128)
 	_, err := rand.Read(encKey)
 	if err != nil {
@@ -112,7 +112,7 @@ func (s *Storage) autoInit(ctx context.Context) {
 	defer func() { s.workersWg.Done() }()
 	connPrev := true
 	connected := false
-	cw := utils.NewCtxCancellWaiter(ctx, 15*time.Second)
+	cw := utils.NewCtxCancelWaiter(ctx, 15*time.Second)
 
 	for {
 		if cw.Scan() != nil {
