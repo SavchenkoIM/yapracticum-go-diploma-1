@@ -6,12 +6,11 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"strconv"
 	"strings"
 	"time"
 )
 
-func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum int) error {
+func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum string) error {
 	var err error
 	query := `INSERT INTO orders (user_id, order_num) VALUES ($1, $2)`
 
@@ -21,17 +20,18 @@ func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum int) 
 		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
 
 			if s.GetOrderOwner(ctx, orderNum) != userID {
-				s.logger.Sugar().Errorf("Order %d belongs to other user", orderNum)
+				s.logger.Sugar().Errorf("Order %s belongs to other user", orderNum)
 				return fmt.Errorf("%s: %w", err.Error(), ErrOrderOtherUser)
 			}
 
-			s.logger.Sugar().Errorf("Order %d already exists in database", orderNum)
+			s.logger.Sugar().Errorf("Order %s already exists in database", orderNum)
 			return fmt.Errorf("%s: %w", err.Error(), ErrOrderAlreadyExists)
 		}
 		s.logger.Sugar().Errorf(err.Error())
 		return err
 	}
 
+	s.newOrdersCh <- orderNum
 	return nil
 }
 
@@ -55,7 +55,7 @@ func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condi
 		query = `SELECT order_num, status, accrual, uploaded_at FROM orders	WHERE status NOT IN ($1, $2)`
 		rows, err = s.dbConn.Query(ctx, query, StatusInvalid, StatusProcessed)
 	default:
-		return OrdersInfo{}, errors.New("unknown condition for orders data request")
+		return OrdersInfo{}, errors.New("unknown condition for orders newOrdersCh request")
 	}
 
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condi
 	orders := make([]OrderInfo, 0)
 	var (
 		oUser       string
-		oNumber     int64
+		oNumber     string
 		oStatus     OrderStatus
 		oAccrual    pgtype.Int8
 		oUploadedAt time.Time
@@ -79,7 +79,7 @@ func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condi
 			return OrdersInfo{}, err
 		}
 		accr := Numeric(oAccrual.Int64)
-		orders = append(orders, OrderInfo{User: oUser, Number: strconv.FormatInt(oNumber, 10), Status: oStatus, Accrual: &accr, UploadedAt: RFC3339Time(oUploadedAt)})
+		orders = append(orders, OrderInfo{User: oUser, Number: oNumber, Status: oStatus, Accrual: &accr, UploadedAt: RFC3339Time(oUploadedAt)})
 	}
 
 	return OrdersInfo{Orders: orders}, nil

@@ -31,7 +31,7 @@ func (sts *StorageTestSuite) SetupTest() {
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	store, _ := New(config.Config{ConnString: connstring}, logger)
+	store, _ := New(config.Config{ConnString: connstring}, logger, make(chan string, 1000))
 	err = store.Init(context.Background())
 	require.NoError(sts.T(), err)
 
@@ -100,7 +100,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 	/////////////////////////////
 
 	sts.Run(`Add Correct Order`, func() {
-		err := sts.TestStorager.OrderAddNew(ctx, userID, 27815869)
+		err := sts.TestStorager.OrderAddNew(ctx, userID, "27815869")
 		if err != nil {
 			sts.T().Errorf("Failed to add correct order 27815869, Error: %s", err.Error())
 		}
@@ -129,7 +129,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 	})
 
 	sts.Run(`Withdraw 100 Bonus Points`, func() {
-		err := sts.TestStorager.Withdraw(ctx, userID, 27815869, Numeric(10000))
+		err := sts.TestStorager.Withdraw(ctx, userID, "27815869", Numeric(10000))
 		if err != nil {
 			sts.T().Errorf("Failed to withdraw, Error: %s", err.Error())
 		}
@@ -146,7 +146,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 	})
 
 	sts.Run(`Withdraw 150 Bonus Points`, func() {
-		err := sts.TestStorager.Withdraw(ctx, userID, 27815869, Numeric(15000))
+		err := sts.TestStorager.Withdraw(ctx, userID, "27815869", Numeric(15000))
 		if err == nil {
 			sts.T().Errorf("Unexpectedly withdrawed 150 bonus points")
 		}

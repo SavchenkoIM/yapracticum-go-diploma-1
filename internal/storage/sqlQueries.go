@@ -19,7 +19,7 @@ WITH (
 var queryCreateOrders string = `CREATE TABLE IF NOT EXISTS public.orders
 (
     id uuid NOT NULL DEFAULT uuid_generate_v4(),
-    order_num bigint NOT NULL,
+    order_num text NOT NULL,
     user_id uuid NOT NULL,
     status smallint NOT NULL DEFAULT 0,
     accrual bigint,
@@ -39,7 +39,7 @@ var queryCreateWithdrawals string = `CREATE TABLE IF NOT EXISTS public.withdrawa
 (
     id uuid NOT NULL DEFAULT uuid_generate_v4(),
     user_id uuid NOT NULL,
-    order_num bigint NOT NULL,
+    order_num text NOT NULL,
     sum bigint NOT NULL,
     processed_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
     PRIMARY KEY (id),

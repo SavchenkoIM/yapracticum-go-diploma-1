@@ -2,12 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"github.com/jackc/pgx/v5"
-	"strconv"
 	"time"
 )
 
-func (s *Storage) Withdraw(ctx context.Context, userID string, orderNum int64, sum Numeric) error {
+func (s *Storage) Withdraw(ctx context.Context, userID string, orderNum string, sum Numeric) error {
 
 	txOk := false
 	tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
@@ -57,7 +57,7 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (Withdr
 
 	withdrawals := make([]WithdrawalInfo, 0)
 	var (
-		oNumber     int64
+		oNumber     string
 		oSum        Numeric
 		oUploadedAt time.Time
 	)
@@ -68,7 +68,7 @@ func (s *Storage) GetWithdrawalsData(ctx context.Context, userID string) (Withdr
 			s.logger.Sugar().Errorf("Query %s, %s", query, err.Error())
 			return WithdrawalsInfo{}, err
 		}
-		withdrawals = append(withdrawals, WithdrawalInfo{Order: strconv.FormatInt(oNumber, 10), Sum: &oSum, ProcessedAt: RFC3339Time(oUploadedAt)})
+		withdrawals = append(withdrawals, WithdrawalInfo{Order: oNumber, Sum: &oSum, ProcessedAt: RFC3339Time(oUploadedAt)})
 	}
 
 	return WithdrawalsInfo{Withdrawals: withdrawals}, nil
@@ -88,4 +88,60 @@ func (s *Storage) GetBalance(ctx context.Context, userID string) (BalanceInfo, e
 	with := Numeric(withdraw)
 	s.logger.Sugar().Infof("Balance: %s, withdrawn: %s", &curr, &with)
 	return BalanceInfo{Current: &curr, Withdrawn: &with}, nil
+}
+
+func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResponse) error {
+	switch response.Status {
+	case "REGISTERED":
+		return nil
+	case "PROCESSING":
+		query := "UPDATE orders SET status = $1 WHERE order_num = $2"
+		_, err := s.dbConn.Exec(ctx, query, StatusProcessing, response.Order)
+		if err != nil {
+			return err
+		}
+		return nil
+	case "INVALID":
+		query := "UPDATE orders SET status = $1 WHERE order_num = $2"
+		_, err := s.dbConn.Exec(ctx, query, StatusInvalid, response.Order)
+		if err != nil {
+			return err
+		}
+		return nil
+	case "PROCESSED":
+
+		txOk := false
+		tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if !txOk {
+				tx.Rollback(ctx)
+			}
+		}()
+
+		query := "UPDATE orders SET status = $1, accrual = $2 WHERE order_num = $3"
+		_, err = tx.Exec(ctx, query, StatusProcessed, response.Accrual, response.Order)
+		if err != nil {
+			return err
+		}
+
+		query = `UPDATE users SET balance = balance + $1 WHERE id =	(SELECT user_id FROM orders WHERE order_num = $2)`
+		_, err = tx.Exec(ctx, query, response.Accrual, response.Order)
+		if err != nil {
+			return err
+		}
+
+		err = tx.Commit(ctx)
+		if err != nil {
+			return err
+		}
+
+		txOk = true
+
+		return nil
+	default:
+		return errors.New("unknown accrual status")
+	}
 }

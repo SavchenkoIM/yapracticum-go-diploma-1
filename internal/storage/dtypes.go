@@ -14,10 +14,10 @@ type Storager interface {
 	UserRegister(context.Context, string, string) error
 	UserLogin(context.Context, string, string) (string, error)
 	UserCheckLoggedIn(string) (string, error)
-	OrderAddNew(context.Context, string, int) error
+	OrderAddNew(context.Context, string, string) error
 	GetOrdersData(context.Context, string) (OrdersInfo, error)
 	GetUnhandledOrders(context.Context) (OrdersInfo, error)
-	Withdraw(context.Context, string, int64, Numeric) error
+	Withdraw(context.Context, string, string, Numeric) error
 	GetWithdrawalsData(context.Context, string) (WithdrawalsInfo, error)
 	GetBalance(context.Context, string) (BalanceInfo, error)
 	ApplyAccrualResponse(context.Context, AccrualResponse) error

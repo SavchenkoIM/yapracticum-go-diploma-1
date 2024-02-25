@@ -8,15 +8,18 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 	"yapracticum-go-diploma-1/internal/config"
 	"yapracticum-go-diploma-1/internal/storage"
 )
 
-var logger *zap.Logger
-var dbStorage *storage.Storage
-var cfg config.Config
+type Handlers struct {
+	Logger    *zap.Logger
+	DBStorage *storage.Storage
+	Cfg       config.Config
+}
 
 type UserRegisterStruct struct {
 	Login    string `json:"login"`
@@ -28,15 +31,9 @@ type WithdrawStruct struct {
 	Sum   *storage.Numeric `json:"sum"`
 }
 
-func Init(pLogger *zap.Logger, pStorage *storage.Storage, config config.Config) {
-	logger = pLogger
-	dbStorage = pStorage
-	cfg = config
-}
-
-func GetBalance(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) GetBalance(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
-	balance, err := dbStorage.GetBalance(r.Context(), tokenID)
+	balance, err := h.DBStorage.GetBalance(r.Context(), tokenID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
@@ -54,7 +51,7 @@ func GetBalance(w http.ResponseWriter, r *http.Request) {
 	w.Write(mJSON)
 }
 
-func UserRegister(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UserRegister(w http.ResponseWriter, r *http.Request) {
 
 	bodyData := make([]byte, r.ContentLength)
 	_, err := r.Body.Read(bodyData)
@@ -68,13 +65,13 @@ func UserRegister(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(bodyData, &jsonData)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		logger.Error(err.Error())
+		h.Logger.Error(err.Error())
 		return
 	}
 
-	err = dbStorage.UserRegister(r.Context(), jsonData.Login, jsonData.Password)
+	err = h.DBStorage.UserRegister(r.Context(), jsonData.Login, jsonData.Password)
 	if err != nil {
-		logger.Error(err.Error())
+		h.Logger.Error(err.Error())
 		if errors.Is(err, storage.ErrUserAlreadyExists) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
@@ -83,10 +80,10 @@ func UserRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UserLogin(w, r)
+	h.UserLogin(w, r)
 }
 
-func UserLogin(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UserLogin(w http.ResponseWriter, r *http.Request) {
 
 	bodyData := make([]byte, r.ContentLength)
 	r.Body.Read(bodyData)
@@ -96,18 +93,18 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 	err := json.Unmarshal(bodyData, &jsonData)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		logger.Error(err.Error())
+		h.Logger.Error(err.Error())
 		return
 	}
 
-	token, err := dbStorage.UserLogin(r.Context(), jsonData.Login, jsonData.Password)
+	token, err := h.DBStorage.UserLogin(r.Context(), jsonData.Login, jsonData.Password)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserAuthFailed) {
 			w.WriteHeader(http.StatusUnauthorized)
 		} else {
 			w.WriteHeader(http.StatusBadRequest)
 		}
-		logger.Error(err.Error())
+		h.Logger.Error(err.Error())
 		return
 	}
 
@@ -119,7 +116,7 @@ func UserLogin(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func OrderLoad(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) OrderLoad(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
 	bodyData := make([]byte, r.ContentLength)
 	r.Body.Read(bodyData)
@@ -130,12 +127,12 @@ func OrderLoad(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !LunaValid(int(ordernum)) {
+	if !LuhnValid(int(ordernum)) && h.Cfg.UseLuna {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
-	err = dbStorage.OrderAddNew(r.Context(), tokenID, int(ordernum))
+	err = h.DBStorage.OrderAddNew(r.Context(), tokenID, strconv.Itoa(int(ordernum)))
 	if err != nil {
 
 		if errors.Is(err, storage.ErrOrderOtherUser) {
@@ -155,13 +152,13 @@ func OrderLoad(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func UserCheckLoggedInHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UserCheckLoggedInHandler(w http.ResponseWriter, r *http.Request) {
 	cSession, err := r.Cookie("session_token")
 	if err != nil {
 		w.Write([]byte("No session cookie"))
 		return
 	}
-	login, err := dbStorage.UserCheckLoggedIn(cSession.Value)
+	login, err := h.DBStorage.UserCheckLoggedIn(cSession.Value)
 	if err != nil {
 		w.Write([]byte("Not logged in"))
 		return
@@ -169,9 +166,9 @@ func UserCheckLoggedInHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(fmt.Sprintf("Logged userID: %s", login)))
 }
 
-func OrderGetList(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) OrderGetList(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
-	data, err := dbStorage.GetOrdersData(r.Context(), tokenID)
+	data, err := h.DBStorage.GetOrdersData(r.Context(), tokenID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -185,7 +182,7 @@ func OrderGetList(w http.ResponseWriter, r *http.Request) {
 	marshalled, err := json.Marshal(data.Orders)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		logger.Sugar().Errorf(err.Error())
+		h.Logger.Sugar().Errorf(err.Error())
 		return
 	}
 
@@ -193,7 +190,7 @@ func OrderGetList(w http.ResponseWriter, r *http.Request) {
 	w.Write(marshalled)
 }
 
-func Withdraw(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Withdraw(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
 	bodyData := make([]byte, r.ContentLength)
 	r.Body.Read(bodyData)
@@ -206,15 +203,17 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Sugar().Infof("Withdraw request: %s", bodyData)
+	h.Logger.Sugar().Infof("Withdraw request: %s", bodyData)
 
-	orderNum, err := strconv.ParseInt(parsedData.Order, 10, 64)
-	if err != nil {
+	digRe, _ := regexp.Compile(`^\d+$`)
+	m := digRe.FindStringSubmatch(parsedData.Order)
+
+	if m == nil {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
-	err = dbStorage.Withdraw(r.Context(), tokenID, orderNum, *parsedData.Sum)
+	err = h.DBStorage.Withdraw(r.Context(), tokenID, parsedData.Order, *parsedData.Sum)
 	if err != nil {
 		if errors.Is(err, storage.ErrWithdrawNotEnough) {
 			w.WriteHeader(http.StatusPaymentRequired)
@@ -225,9 +224,9 @@ func Withdraw(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func WithdrawGetList(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) WithdrawGetList(w http.ResponseWriter, r *http.Request) {
 	tokenID := r.Header.Get("LoggedUserId")
-	data, err := dbStorage.GetWithdrawalsData(r.Context(), tokenID)
+	data, err := h.DBStorage.GetWithdrawalsData(r.Context(), tokenID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -241,7 +240,7 @@ func WithdrawGetList(w http.ResponseWriter, r *http.Request) {
 	marshalled, err := json.Marshal(data.Withdrawals)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		logger.Sugar().Errorf(err.Error())
+		h.Logger.Sugar().Errorf(err.Error())
 		return
 	}
 

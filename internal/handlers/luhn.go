@@ -1,9 +1,6 @@
 package handlers
 
-func LunaValid(number int) bool {
-	if !cfg.UseLuna {
-		return true
-	}
+func LuhnValid(number int) bool {
 	return (number%10+checksum(number/10))%10 == 0
 }
 
