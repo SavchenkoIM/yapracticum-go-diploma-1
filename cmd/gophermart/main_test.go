@@ -129,16 +129,12 @@ func TestIter2Server(t *testing.T) {
 
 				body = []byte("")
 				res, errReq = cli.Do(req)
-				defer res.Body.Close() // For ******* govet!!!
-				body, err = io.ReadAll(res.Body)
-				res.Body.Close()
-				require.NoError(t, err)
 				require.NoError(t, errReq)
+				if errReq == nil {
+					body, err = io.ReadAll(res.Body)
+					res.Body.Close()
+					require.NoError(t, err)
 
-				if err == nil {
-					if err != nil {
-						body = []byte("")
-					}
 					_authCookie := res.Header.Get("Set-Cookie")
 					if _authCookie != "" {
 						authCookie = _authCookie
