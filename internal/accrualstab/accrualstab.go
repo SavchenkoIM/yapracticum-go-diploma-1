@@ -67,30 +67,30 @@ func (as *AccrualStab) GetOrderInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(resMarsh)
-	return
 
 }
 
 func (as *AccrualStab) Processing() {
 	tmr := time.NewTicker(1 * time.Second)
-	for {
-		select {
-		case <-tmr.C:
-			as.ordersDB.M.Lock()
-			for k, v := range as.ordersDB.Orders {
-				d := time.Now().Sub(v.AddedAt)
-				switch {
-				case d < 3*time.Second:
-				default:
-					v.Status = "PROCESSED"
-					acc, _ := strconv.Atoi(k)
-					v.Accrual = storage.Numeric(acc)
-					as.ordersDB.Orders[k] = v
-				}
+	for range tmr.C {
+		// For range instead select as govet requested
+		//select {
+		//case <-tmr.C:
+		as.ordersDB.M.Lock()
+		for k, v := range as.ordersDB.Orders {
+			d := time.Since(v.AddedAt)
+			switch {
+			case d < 3*time.Second:
+			default:
+				v.Status = "PROCESSED"
+				acc, _ := strconv.Atoi(k)
+				v.Accrual = storage.Numeric(acc)
+				as.ordersDB.Orders[k] = v
 			}
-			as.ordersDB.M.Unlock()
 		}
+		as.ordersDB.M.Unlock()
 	}
+	//}
 }
 
 func NewAccrualStab(endpoint string) *AccrualStab {

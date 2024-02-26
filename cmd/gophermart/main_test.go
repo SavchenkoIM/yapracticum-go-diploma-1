@@ -139,6 +139,7 @@ func TestIter2Server(t *testing.T) {
 						authCookie = _authCookie
 					}
 				}
+				res.Body.Close()
 
 				println("Response Body: \"" + string(body) + "\"")
 
