@@ -130,9 +130,7 @@ func TestIter2Server(t *testing.T) {
 				res, err = cli.Do(req)
 				require.NoError(t, err)
 				body, err = io.ReadAll(res.Body)
-				if body != nil {
-					res.Body.Close()
-				}
+				res.Body.Close()
 
 				if err == nil {
 					if err != nil {
