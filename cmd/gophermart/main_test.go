@@ -129,6 +129,7 @@ func TestIter2Server(t *testing.T) {
 
 				body = []byte("")
 				res, errReq = cli.Do(req)
+				defer res.Body.Close() // For ******* govet!!!
 				body, err = io.ReadAll(res.Body)
 				res.Body.Close()
 				require.NoError(t, err)
