@@ -116,6 +116,7 @@ func TestIter2Server(t *testing.T) {
 	var res *http.Response
 	var req *http.Request
 	var body []byte
+	var errReq error
 
 	for _, tt := range tests {
 
@@ -127,10 +128,11 @@ func TestIter2Server(t *testing.T) {
 				req.Header.Set("Cookie", authCookie)
 
 				body = []byte("")
-				res, err = cli.Do(req)
-				require.NoError(t, err)
+				res, errReq = cli.Do(req)
 				body, err = io.ReadAll(res.Body)
 				res.Body.Close()
+				require.NoError(t, err)
+				require.NoError(t, errReq)
 
 				if err == nil {
 					if err != nil {
