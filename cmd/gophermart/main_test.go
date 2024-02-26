@@ -126,11 +126,15 @@ func TestIter2Server(t *testing.T) {
 				req, err = http.NewRequest(tt.method, tt.url, bytes.NewBuffer([]byte(tt.body)))
 				req.Header.Set("Cookie", authCookie)
 
+				body = []byte("")
 				res, err = cli.Do(req)
 				require.NoError(t, err)
+				body, err = io.ReadAll(res.Body)
+				if body != nil {
+					res.Body.Close()
+				}
 
 				if err == nil {
-					body, err = io.ReadAll(res.Body)
 					if err != nil {
 						body = []byte("")
 					}
@@ -139,7 +143,6 @@ func TestIter2Server(t *testing.T) {
 						authCookie = _authCookie
 					}
 				}
-				res.Body.Close()
 
 				println("Response Body: \"" + string(body) + "\"")
 
