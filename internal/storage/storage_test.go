@@ -31,7 +31,7 @@ func (sts *StorageTestSuite) SetupTest() {
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	store, _ := New(config.Config{ConnString: connstring}, logger, make(chan string, 1000))
+	store, _ := New(config.Config{ConnString: connstring}, logger, make(chan OrderTag, 1000))
 	err = store.Init(context.Background())
 	require.NoError(sts.T(), err)
 

@@ -86,9 +86,9 @@ func AccrualPollWorker(ccw *utils.CtxCancelWaiter, s *storage.Storage, id int, w
 
 func GetUnhandledOrders(ctx context.Context, s *storage.Storage, wg *sync.WaitGroup, logger *zap.Logger, data chan storage.OrderTag) {
 	wg.Add(1)
-	logger.Info(fmt.Sprintf("GetUnhandledOrders worker started"))
+	logger.Info("GetUnhandledOrders worker started")
 	defer func() {
-		logger.Info(fmt.Sprintf("GetUnhandledOrders worker stopped"))
+		logger.Info("GetUnhandledOrders worker stopped")
 		wg.Done()
 	}()
 
