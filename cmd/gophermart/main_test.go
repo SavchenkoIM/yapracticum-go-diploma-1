@@ -115,7 +115,6 @@ func TestIter2Server(t *testing.T) {
 	var res *http.Response
 	var req *http.Request
 	var body []byte
-	var errReq error
 
 	for _, tt := range tests {
 
@@ -127,8 +126,8 @@ func TestIter2Server(t *testing.T) {
 				req.Header.Set("Cookie", authCookie)
 
 				body = []byte("")
-				res, errReq = cli.Do(req)
-				if errReq == nil {
+				res, err = cli.Do(req)
+				if err == nil {
 					//body, err = io.ReadAll(res.Body)
 					body = make([]byte, res.ContentLength)
 					res.Body.Read(body)
@@ -140,7 +139,7 @@ func TestIter2Server(t *testing.T) {
 						authCookie = _authCookie
 					}
 				}
-				require.NoError(t, errReq)
+				require.NoError(t, err)
 
 				println("Response Body: \"" + string(body) + "\"")
 
@@ -173,15 +172,15 @@ poll during requested timeout (order 429)`
 
 		time.Sleep(15 * time.Second)
 
-		req, err = http.NewRequest(http.MethodGet, "http://localhost:8080/api/user/balance", nil)
+		req, _ = http.NewRequest(http.MethodGet, "http://localhost:8080/api/user/balance", nil)
 		req.Header.Set("Cookie", authCookie)
-		res, errReq = cli.Do(req)
-		if errReq == nil {
+		res, err = cli.Do(req)
+		require.NoError(t, err)
+		if err == nil {
 			body, err = io.ReadAll(res.Body)
 			res.Body.Close()
 			require.NoError(t, err)
 		}
-		require.NoError(t, errReq)
 
 		assert.JSONEq(t, `{"current":7814666.22,"withdrawn":100.00}`, string(body))
 	})
