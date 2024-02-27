@@ -127,11 +127,12 @@ func TestComplex(t *testing.T) {
 
 				body = []byte("")
 				res, err = cli.Do(req)
+				res.Body.Close()
 
 				// Incorrect, but maybe go vet would be happy?
 				//if err == nil {
-				body, err = io.ReadAll(res.Body)
-				res.Body.Close()
+				//body, err = io.ReadAll(res.Body)
+				//res.Body.Close()
 				require.NoError(t, err)
 
 				_authCookie := res.Header.Get("Set-Cookie")
