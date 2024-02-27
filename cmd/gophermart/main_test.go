@@ -111,7 +111,7 @@ func TestIter2Server(t *testing.T) {
 	// RunTests
 	//////////////////////
 
-	cli := http.Client{}
+	cli := http.Client{Transport: &http.Transport{DisableCompression: true}}
 	var res *http.Response
 	var req *http.Request
 	var body []byte
@@ -129,7 +129,9 @@ func TestIter2Server(t *testing.T) {
 				body = []byte("")
 				res, errReq = cli.Do(req)
 				if errReq == nil {
-					body, err = io.ReadAll(res.Body)
+					//body, err = io.ReadAll(res.Body)
+					body = make([]byte, res.ContentLength)
+					res.Body.Read(body)
 					res.Body.Close()
 					require.NoError(t, err)
 

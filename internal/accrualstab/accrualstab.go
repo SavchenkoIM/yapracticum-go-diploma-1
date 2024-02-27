@@ -48,7 +48,7 @@ func (as *AccrualStab) Error() error {
 }
 
 //////////////////////
-// Handler & Worker
+// Handler
 //////////////////////
 
 func (as *AccrualStab) GetOrderInfo(w http.ResponseWriter, r *http.Request) {
