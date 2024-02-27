@@ -12,7 +12,9 @@ import (
 	"yapracticum-go-diploma-1/internal/storage"
 )
 
+////////////////////////
 // TestServer
+////////////////////////
 
 type AccrualStab struct {
 	http.Server
@@ -22,6 +24,32 @@ type AccrualStab struct {
 	notAvailUntil time.Time
 	not429Until   time.Time
 }
+
+func NewAccrualStab(endpoint string) *AccrualStab {
+	ordersDB := NewOrdersDB()
+	as := AccrualStab{testErrors: make([]error, 0), ordersDB: ordersDB}
+	mux := chi.NewMux()
+	mux.Get("/api/orders/{number}", as.GetOrderInfo)
+	as.Server = http.Server{Addr: endpoint, Handler: mux}
+	return &as
+}
+
+func (as *AccrualStab) Serve() error {
+	go as.Processing()
+	err := as.ListenAndServe()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (as *AccrualStab) Error() error {
+	return errors.Join(as.testErrors...)
+}
+
+//////////////////////
+// Handler & Worker
+//////////////////////
 
 func (as *AccrualStab) GetOrderInfo(w http.ResponseWriter, r *http.Request) {
 
@@ -93,37 +121,15 @@ func (as *AccrualStab) Processing() {
 	//}
 }
 
-func NewAccrualStab(endpoint string) *AccrualStab {
-	ordersDB := NewOrdersDB()
-	as := AccrualStab{testErrors: make([]error, 0), ordersDB: ordersDB}
-	mux := chi.NewMux()
-	mux.Get("/api/orders/{number}", as.GetOrderInfo)
-	as.Server = http.Server{Addr: endpoint, Handler: mux}
-	return &as
-}
-
-func (as *AccrualStab) Serve() error {
-	go as.Processing()
-	err := as.ListenAndServe()
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (as *AccrualStab) Error() error {
-	return errors.Join(as.testErrors...)
-}
-
-// TestOrder
+/////////////////////////
+// Orders DB
+/////////////////////////
 
 type TestOrder struct {
 	Accrual storage.Numeric
 	Status  string
 	AddedAt time.Time
 }
-
-// Orders DB
 
 func NewOrdersDB() *OrdersDB {
 	return &OrdersDB{Orders: make(map[string]TestOrder)}

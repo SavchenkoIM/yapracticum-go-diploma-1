@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func TestIter2Server(t *testing.T) {
 	var err error
 	storageContainer := testhelpers.NewTestDatabase(t)
 	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(t))
-	logger, err = zap.NewProduction()
+	logger, err = zap.NewDevelopment()
 	require.NoError(t, err)
 
 	//////////////////////
@@ -63,9 +64,7 @@ func TestIter2Server(t *testing.T) {
 
 	parentContext, cancel := context.WithCancel(context.Background())
 
-	if logger, err = zap.NewProduction(); err != nil {
-		panic(err)
-	}
+	//if logger, err = zap.NewProduction(); err != nil { panic(err) }
 
 	cfg := config.Config{ConnString: connstring, UseLuna: false, Endpoint: "localhost:8080", AccrualAddress: "http://localhost:8090"}
 	newOrdersCh := make(chan storage.OrderTag, 1000)
@@ -163,4 +162,41 @@ poll during requested timeout (order 429)`
 
 		assert.Equal(t, err.Error(), errText)
 	})
+
+	t.Run("500 orders at once", func(t *testing.T) {
+
+		for i := 2000; i <= 2500; i++ {
+			go PlaceOrder(i, authCookie)
+		}
+
+		time.Sleep(15 * time.Second)
+
+		req, err = http.NewRequest(http.MethodGet, "http://localhost:8080/api/user/balance", nil)
+		req.Header.Set("Cookie", authCookie)
+		res, errReq = cli.Do(req)
+		if errReq == nil {
+			body, err = io.ReadAll(res.Body)
+			res.Body.Close()
+			require.NoError(t, err)
+		}
+		require.NoError(t, errReq)
+
+		assert.JSONEq(t, `{"current":7814666.22,"withdrawn":100.00}`, string(body))
+	})
+}
+
+func PlaceOrder(i int, authCookie string) {
+	success := false
+	for !success {
+		cli := http.Client{}
+		req, _ := http.NewRequest(http.MethodPost, "http://localhost:8080/api/user/orders", bytes.NewBuffer([]byte(strconv.Itoa(i))))
+		req.Header.Set("Cookie", authCookie)
+		res, err := cli.Do(req)
+		if err == nil {
+			res.Body.Close()
+			success = true
+		} else {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
