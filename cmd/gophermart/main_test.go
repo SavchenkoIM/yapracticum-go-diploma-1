@@ -112,7 +112,7 @@ func TestComplex(t *testing.T) {
 	//////////////////////
 
 	cli := http.Client{}
-	var res *http.Response
+	//var res *http.Response
 	var req *http.Request
 	var body []byte
 
@@ -126,20 +126,18 @@ func TestComplex(t *testing.T) {
 				req.Header.Set("Cookie", authCookie)
 
 				body = []byte("")
-				res, err = cli.Do(req)
-				res.Body.Close()
+				res, err := cli.Do(req)
 
-				// Incorrect, but maybe go vet would be happy?
-				//if err == nil {
-				//body, err = io.ReadAll(res.Body)
-				//res.Body.Close()
-				require.NoError(t, err)
+				if err == nil {
+					body, err = io.ReadAll(res.Body)
+					res.Body.Close()
+					require.NoError(t, err)
 
-				_authCookie := res.Header.Get("Set-Cookie")
-				if _authCookie != "" {
-					authCookie = _authCookie
+					_authCookie := res.Header.Get("Set-Cookie")
+					if _authCookie != "" {
+						authCookie = _authCookie
+					}
 				}
-				//}
 				require.NoError(t, err)
 
 				println("Response Body: \"" + string(body) + "\"")
@@ -175,7 +173,7 @@ poll during requested timeout (order 429)`
 
 		req, _ = http.NewRequest(http.MethodGet, "http://localhost:8080/api/user/balance", nil)
 		req.Header.Set("Cookie", authCookie)
-		res, err = cli.Do(req)
+		res, err := cli.Do(req)
 		require.NoError(t, err)
 		if err == nil {
 			body, err = io.ReadAll(res.Body)
