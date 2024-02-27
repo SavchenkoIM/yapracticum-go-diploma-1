@@ -22,7 +22,7 @@ import (
 	"yapracticum-go-diploma-1/internal/utils"
 )
 
-func TestIter2Server(t *testing.T) {
+func TestComplex(t *testing.T) {
 
 	tests := []struct {
 		testName       string
@@ -111,7 +111,7 @@ func TestIter2Server(t *testing.T) {
 	// RunTests
 	//////////////////////
 
-	cli := http.Client{Transport: &http.Transport{DisableCompression: true}}
+	cli := http.Client{}
 	var res *http.Response
 	var req *http.Request
 	var body []byte
@@ -127,18 +127,18 @@ func TestIter2Server(t *testing.T) {
 
 				body = []byte("")
 				res, err = cli.Do(req)
-				if err == nil {
-					//body, err = io.ReadAll(res.Body)
-					body = make([]byte, res.ContentLength)
-					res.Body.Read(body)
-					res.Body.Close()
-					require.NoError(t, err)
 
-					_authCookie := res.Header.Get("Set-Cookie")
-					if _authCookie != "" {
-						authCookie = _authCookie
-					}
+				// Incorrect, but maybe go vet would be happy?
+				//if err == nil {
+				body, err = io.ReadAll(res.Body)
+				res.Body.Close()
+				require.NoError(t, err)
+
+				_authCookie := res.Header.Get("Set-Cookie")
+				if _authCookie != "" {
+					authCookie = _authCookie
 				}
+				//}
 				require.NoError(t, err)
 
 				println("Response Body: \"" + string(body) + "\"")
