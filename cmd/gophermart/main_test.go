@@ -66,7 +66,7 @@ func TestComplex(t *testing.T) {
 
 	//if logger, err = zap.NewProduction(); err != nil { panic(err) }
 
-	cfg := config.Config{ConnString: connstring, UseLuna: false, Endpoint: "localhost:8080", AccrualAddress: "http://localhost:8090"}
+	cfg := config.Config{ConnString: connstring, UseLuhn: false, Endpoint: "localhost:8080", AccrualAddress: "http://localhost:8090"}
 	newOrdersCh := make(chan storage.OrderTag, 1000)
 	dbStorage, err = storage.New(cfg, logger, newOrdersCh)
 	if err != nil {

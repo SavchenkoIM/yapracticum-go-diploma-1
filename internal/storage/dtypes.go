@@ -133,9 +133,9 @@ func (rfTime RFC3339Time) MarshalJSON() ([]byte, error) {
 // Status code
 type OrderStatus int64
 
-func (os *OrderStatus) MarshalJSON() ([]byte, error) {
+func (os OrderStatus) MarshalJSON() ([]byte, error) {
 	sRepr := ""
-	switch *os {
+	switch os {
 	case StatusNew:
 		sRepr = "NEW"
 	case StatusProcessing:

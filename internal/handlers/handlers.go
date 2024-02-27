@@ -111,7 +111,7 @@ func (h *Handlers) UserLogin(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:    "session_token",
 		Value:   token,
-		Expires: time.Date(2050, 1, 1, 0, 0, 0, 0, time.Local),
+		Expires: time.Now().Add(storage.TokenExp).Add(time.Hour), // Cookie expires a hour after token
 	})
 
 }
@@ -127,7 +127,7 @@ func (h *Handlers) OrderLoad(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !LuhnValid(int(ordernum)) && h.Cfg.UseLuna {
+	if !LuhnValid(int(ordernum)) && h.Cfg.UseLuhn {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
