@@ -176,7 +176,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 
 		expLen := len(or.Orders) == 1
 
-		var jsonTest []byte = []byte("")
+		var jsonTest = []byte("")
 		if expLen {
 			orTest := OrdersInfo{Orders: make([]OrderInfo, len(or.Orders))}
 			val := Numeric(0)
@@ -284,7 +284,7 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 
 		expLen := len(wi.Withdrawals) == 1
 
-		var jsonTest []byte = []byte("")
+		var jsonTest = []byte("")
 		if expLen {
 			wiTest := WithdrawalsInfo{Withdrawals: make([]WithdrawalInfo, len(wi.Withdrawals))}
 			val := Numeric(10000)
