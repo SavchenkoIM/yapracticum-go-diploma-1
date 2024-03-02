@@ -106,11 +106,6 @@ const (
 	StatusProcessed         // данные по заказу проверены и информация о расчёте успешно получена.
 )
 
-const (
-	OrdersRequestByUser = iota
-	OrdersRequestByStatusUnhandled
-)
-
 type OrdersInfo struct {
 	Orders []OrderInfo
 }

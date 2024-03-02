@@ -37,9 +37,8 @@ func main() {
 
 	workersWg := sync.WaitGroup{}
 	ccw := utils.NewCtxCancelWaiter(parentContext, 0)
-	for i := 1; i <= 5; i++ {
-		go accrualpoll.AccrualPollWorker(ccw, dbStorage, i, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
-	}
+	accrualPoll := accrualpoll.NewAccrualPollWorker(ccw, dbStorage, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
+	accrualPoll.StartPoll(5)
 
 	go accrualpoll.GetUnhandledOrders(parentContext, dbStorage, &workersWg, logger, newOrdersCh)
 

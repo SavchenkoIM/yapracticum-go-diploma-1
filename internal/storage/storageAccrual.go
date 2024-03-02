@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"github.com/jackc/pgx/v5"
 	"time"
 )
@@ -95,21 +94,26 @@ func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResp
 	case "REGISTERED":
 		return nil
 	case "PROCESSING":
-		query := "UPDATE orders SET status = $1 WHERE order_num = $2"
-		_, err := s.dbConn.Exec(ctx, query, StatusProcessing, response.Order)
+		query := "UPDATE orders SET status = $1 WHERE order_num = $2 AND NOT is_final"
+		tag, err := s.dbConn.Exec(ctx, query, StatusProcessing, response.Order)
+		if tag.RowsAffected() == 0 {
+			return ErrNoDataChanged
+		}
 		if err != nil {
 			return err
 		}
 		return nil
 	case "INVALID":
-		query := "UPDATE orders SET status = $1 WHERE order_num = $2"
-		_, err := s.dbConn.Exec(ctx, query, StatusInvalid, response.Order)
+		query := "UPDATE orders SET status = $1, is_final = true WHERE order_num = $2 AND NOT is_final"
+		tag, err := s.dbConn.Exec(ctx, query, StatusInvalid, response.Order)
+		if tag.RowsAffected() == 0 {
+			return ErrNoDataChanged
+		}
 		if err != nil {
 			return err
 		}
 		return nil
 	case "PROCESSED":
-
 		txOk := false
 		tx, err := s.dbConn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
@@ -121,16 +125,21 @@ func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResp
 			}
 		}()
 
-		query := "UPDATE orders SET status = $1, accrual = $2 WHERE order_num = $3"
-		_, err = tx.Exec(ctx, query, StatusProcessed, response.Accrual, response.Order)
+		query := "UPDATE orders SET status = $1, accrual = $2, is_final = true WHERE order_num = $3 AND NOT is_final"
+		tag, err := tx.Exec(ctx, query, StatusProcessed, response.Accrual, response.Order)
 		if err != nil {
 			return err
+		}
+
+		if tag.RowsAffected() == 0 {
+			tx.Rollback(ctx)
+			return ErrNoDataChanged
 		}
 
 		query = `UPDATE users SET balance = balance + $1 WHERE id =	(SELECT user_id FROM orders WHERE order_num = $2)`
 		_, err = tx.Exec(ctx, query, response.Accrual, response.Order)
 		if err != nil {
-			return err
+			return ErrNoDataChanged
 		}
 
 		err = tx.Commit(ctx)
@@ -142,6 +151,6 @@ func (s *Storage) ApplyAccrualResponse(ctx context.Context, response AccrualResp
 
 		return nil
 	default:
-		return errors.New("unknown accrual status")
+		return ErrUnknownAccrualStatus
 	}
 }

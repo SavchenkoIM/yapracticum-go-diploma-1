@@ -2,22 +2,27 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"strconv"
 	"strings"
 	"time"
+	"yapracticum-go-diploma-1/internal/utils"
 )
 
 func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum string) error {
-	var err error
+	oNum, err := strconv.Atoi(orderNum)
+	if err != nil || (!utils.LuhnValid(int(oNum)) && s.config.UseLuhn) {
+		return ErrOrderLuhnCheckFailed
+	}
+
 	query := `INSERT INTO orders (user_id, order_num) VALUES ($1, $2)`
 
 	_, err = s.dbConn.Exec(ctx, query, userID, orderNum)
 	if err != nil {
-		fmt.Println(err.Error())
-		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
+		if strings.Contains(err.Error(), pgerrcode.UniqueViolation) {
 
 			if s.GetOrderOwner(ctx, orderNum) != userID {
 				s.logger.Sugar().Errorf("Order %s belongs to other user", orderNum)
@@ -41,33 +46,26 @@ func (s *Storage) OrderAddNew(ctx context.Context, userID string, orderNum strin
 }
 
 func (s *Storage) GetOrdersData(ctx context.Context, userID string) (OrdersInfo, error) {
-	return s.getOrdersByCondition(ctx, userID, OrdersRequestByUser)
-}
-
-func (s *Storage) GetUnhandledOrders(ctx context.Context) (OrdersInfo, error) {
-	return s.getOrdersByCondition(ctx, "", OrdersRequestByStatusUnhandled)
-}
-
-func (s *Storage) getOrdersByCondition(ctx context.Context, userID string, condition int) (OrdersInfo, error) {
-	var err error
-	var rows pgx.Rows
-	var query string
-	switch condition {
-	case OrdersRequestByUser:
-		query = `SELECT order_num, status, accrual, uploaded_at FROM orders WHERE user_id = $1`
-		rows, err = s.dbConn.Query(ctx, query, userID)
-	case OrdersRequestByStatusUnhandled:
-		query = `SELECT order_num, status, accrual, uploaded_at FROM orders	WHERE status NOT IN ($1, $2)`
-		rows, err = s.dbConn.Query(ctx, query, StatusInvalid, StatusProcessed)
-	default:
-		return OrdersInfo{}, errors.New("unknown condition for orders newOrdersCh request")
-	}
-
+	query := `SELECT order_num, status, accrual, uploaded_at FROM orders WHERE user_id = $1`
+	rows, err := s.dbConn.Query(ctx, query, userID)
 	if err != nil {
 		s.logger.Sugar().Errorf(err.Error())
 		return OrdersInfo{}, err
 	}
+	return s.getOrdersFromRequest(rows, query)
+}
 
+func (s *Storage) GetUnhandledOrders(ctx context.Context) (OrdersInfo, error) {
+	query := `SELECT order_num, status, accrual, uploaded_at FROM orders	WHERE status NOT IN ($1, $2)`
+	rows, err := s.dbConn.Query(ctx, query, StatusInvalid, StatusProcessed)
+	if err != nil {
+		s.logger.Sugar().Errorf(err.Error())
+		return OrdersInfo{}, err
+	}
+	return s.getOrdersFromRequest(rows, query)
+}
+
+func (s *Storage) getOrdersFromRequest(rows pgx.Rows, query string) (OrdersInfo, error) {
 	orders := make([]OrderInfo, 0)
 	var (
 		oUser       string

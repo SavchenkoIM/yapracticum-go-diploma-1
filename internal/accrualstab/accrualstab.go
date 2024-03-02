@@ -1,10 +1,12 @@
 package accrualstab
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-redis/redis/v8"
 	"net/http"
 	"strconv"
 	"sync"
@@ -25,8 +27,8 @@ type AccrualStab struct {
 	not429Until   time.Time
 }
 
-func NewAccrualStab(endpoint string) *AccrualStab {
-	ordersDB := NewOrdersDB()
+func NewAccrualStab(endpoint string, redisEndpoint string) *AccrualStab {
+	ordersDB := NewOrdersDB(redisEndpoint)
 	as := AccrualStab{testErrors: make([]error, 0), ordersDB: ordersDB}
 	mux := chi.NewMux()
 	mux.Get("/api/orders/{number}", as.GetOrderInfo)
@@ -76,10 +78,11 @@ func (as *AccrualStab) GetOrderInfo(w http.ResponseWriter, r *http.Request) {
 		res = storage.AccrualResponse{
 			Order:   orderNum,
 			Status:  val.Status,
-			Accrual: &val.Accrual,
+			Accrual: val.Accrual,
 		}
 	} else {
-		to := TestOrder{Status: "PROCESSING", AddedAt: time.Now(), Accrual: 0}
+		val := storage.Numeric(0)
+		to := TestOrder{Status: "PROCESSING", AddedAt: time.Now(), Accrual: &val}
 		as.ordersDB.Set(orderNum, to)
 		res = storage.AccrualResponse{
 			Order:  orderNum,
@@ -104,19 +107,27 @@ func (as *AccrualStab) Processing() {
 		// For range instead select as govet requested
 		//select {
 		//case <-tmr.C:
-		as.ordersDB.M.Lock()
-		for k, v := range as.ordersDB.Orders {
+		keys, err := as.ordersDB.cli.Keys(context.Background(), "*").Result()
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		for _, iv := range keys {
+			v, exist := as.ordersDB.Get(iv)
+			if !exist {
+				continue
+			}
 			d := time.Since(v.AddedAt)
 			switch {
 			case d < 3*time.Second:
 			default:
 				v.Status = "PROCESSED"
-				acc, _ := strconv.Atoi(k)
-				v.Accrual = storage.Numeric(acc)
-				as.ordersDB.Orders[k] = v
+				acc, _ := strconv.Atoi(iv)
+				val := storage.Numeric(acc)
+				v.Accrual = &val
+				as.ordersDB.Set(iv, v)
 			}
 		}
-		as.ordersDB.M.Unlock()
 	}
 	//}
 }
@@ -126,29 +137,43 @@ func (as *AccrualStab) Processing() {
 /////////////////////////
 
 type TestOrder struct {
-	Accrual storage.Numeric
-	Status  string
-	AddedAt time.Time
+	Accrual *storage.Numeric `json:"accrual"`
+	Status  string           `json:"status"`
+	AddedAt time.Time        `json:"addedAt"`
 }
 
-func NewOrdersDB() *OrdersDB {
-	return &OrdersDB{Orders: make(map[string]TestOrder)}
+func NewOrdersDB(endpoint string) *OrdersDB {
+	return &OrdersDB{cli: redis.NewClient(&redis.Options{
+		Addr:     endpoint,
+		Password: "",
+		DB:       0,
+	})}
 }
 
 type OrdersDB struct {
-	M      sync.RWMutex
-	Orders map[string]TestOrder
+	cli *redis.Client
 }
 
 func (odb *OrdersDB) Get(key string) (TestOrder, bool) {
-	odb.M.RLock()
-	defer odb.M.RUnlock()
-	order, exist := odb.Orders[key]
-	return order, exist
+	val, err := odb.cli.Get(context.Background(), key).Result()
+	if err != nil {
+		return TestOrder{}, false
+	}
+	var res TestOrder
+	err = json.Unmarshal([]byte(val), &res)
+	if err != nil {
+		return TestOrder{}, false
+	}
+	return res, true
 }
 
 func (odb *OrdersDB) Set(key string, val TestOrder) {
-	odb.M.Lock()
-	defer odb.M.Unlock()
-	odb.Orders[key] = val
+	jsonm, err := json.Marshal(val)
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = odb.cli.Set(context.Background(), key, jsonm, 0).Err()
+	if err != nil {
+		fmt.Println(err)
+	}
 }

@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func GophermartRouter(h Handlers) chi.Router {
-
 	router := chi.NewRouter()
 	router.Use(
 		h.Recoverer,
@@ -25,6 +25,9 @@ func GophermartRouter(h Handlers) chi.Router {
 	router.Post("/api/user/balance/withdraw", h.Withdraw)
 	// получение информации о выводе средств с накопительного счёта пользователем
 	router.Get("/api/user/withdrawals", h.WithdrawGetList)
+
+	// Prometheus
+	router.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	// Test
 	router.Get("/api/user/checklogged", h.UserCheckLoggedInHandler)

@@ -16,6 +16,41 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+type TestRedis struct {
+	instance testcontainers.Container
+}
+
+func NewTestRedis(t *testing.T) *TestRedis {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	req := testcontainers.ContainerRequest{
+		Image:        "redis",
+		ExposedPorts: []string{"6379/tcp"},
+		AutoRemove:   true,
+		WaitingFor:   wait.ForListeningPort("6379/tcp"),
+	}
+	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+	require.NoError(t, err)
+	return &TestRedis{
+		instance: container,
+	}
+}
+
+func (db *TestRedis) Port(t *testing.T) int {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	p, err := db.instance.MappedPort(ctx, "6379")
+	require.NoError(t, err)
+	return p.Int()
+}
+
+func (db *TestRedis) Host() string {
+	return "localhost"
+}
+
 type TestDatabase struct {
 	instance testcontainers.Container
 }

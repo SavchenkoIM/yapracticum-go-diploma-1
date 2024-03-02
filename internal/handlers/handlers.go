@@ -113,6 +113,7 @@ func (h *Handlers) UserLogin(w http.ResponseWriter, r *http.Request) {
 		Value:   token,
 		Expires: time.Now().Add(storage.TokenExp).Add(time.Hour), // Cookie expires a hour after token
 	})
+	w.WriteHeader(http.StatusOK)
 
 }
 
@@ -127,10 +128,6 @@ func (h *Handlers) OrderLoad(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if !LuhnValid(int(ordernum)) && h.Cfg.UseLuhn {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		return
-	}
 
 	err = h.DBStorage.OrderAddNew(r.Context(), tokenID, strconv.Itoa(int(ordernum)))
 	if err != nil {
@@ -142,6 +139,11 @@ func (h *Handlers) OrderLoad(w http.ResponseWriter, r *http.Request) {
 
 		if errors.Is(err, storage.ErrOrderAlreadyExists) {
 			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if errors.Is(err, storage.ErrOrderLuhnCheckFailed) {
+			w.WriteHeader(http.StatusUnprocessableEntity)
 			return
 		}
 

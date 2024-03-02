@@ -23,6 +23,7 @@ var queryCreateOrders string = `CREATE TABLE IF NOT EXISTS public.orders
     user_id uuid NOT NULL,
     status smallint NOT NULL DEFAULT 0,
     accrual bigint,
+    is_final bool DEFAULT false,
     uploaded_at timestamp with time zone NOT NULL DEFAULT current_timestamp,
     PRIMARY KEY (id),
     CONSTRAINT uk_order_num UNIQUE (order_num),

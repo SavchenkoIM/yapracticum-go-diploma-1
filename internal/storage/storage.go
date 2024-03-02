@@ -23,6 +23,9 @@ var ErrUserNotLoggedIn error = errors.New("user session has expired")
 var ErrOrderAlreadyExists error = errors.New("this order already exists in database")
 var ErrOrderOtherUser error = errors.New("this order belongs to other user")
 var ErrWithdrawNotEnough error = errors.New("hot enough bonus points")
+var ErrOrderLuhnCheckFailed error = errors.New("incorrect order number (Luhn check)")
+var ErrNoDataChanged error = errors.New("no data was changed")
+var ErrUnknownAccrualStatus error = errors.New("unknown accrual status")
 
 type Storage struct {
 	dbConn      *pgxpool.Pool

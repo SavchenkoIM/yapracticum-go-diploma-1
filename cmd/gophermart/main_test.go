@@ -58,6 +58,9 @@ func TestComplex(t *testing.T) {
 	logger, err = zap.NewDevelopment()
 	require.NoError(t, err)
 
+	storageContainerRedis := testhelpers.NewTestRedis(t)
+	endpRedis := fmt.Sprintf("%s:%d", storageContainerRedis.Host(), storageContainerRedis.Port(t))
+
 	//////////////////////
 	// Setup gophermart
 	//////////////////////
@@ -77,9 +80,8 @@ func TestComplex(t *testing.T) {
 
 	workersWg := sync.WaitGroup{}
 	ccw := utils.NewCtxCancelWaiter(parentContext, 0)
-	for i := 1; i <= 5; i++ {
-		go accrualpoll.AccrualPollWorker(ccw, dbStorage, i, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
-	}
+	accrualPoll := accrualpoll.NewAccrualPollWorker(ccw, dbStorage, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
+	accrualPoll.StartPoll(5)
 
 	go accrualpoll.GetUnhandledOrders(parentContext, dbStorage, &workersWg, logger, newOrdersCh)
 
@@ -92,7 +94,7 @@ func TestComplex(t *testing.T) {
 	// Setup accrual
 	//////////////////////
 
-	s := accrualstab.NewAccrualStab("localhost:8090")
+	s := accrualstab.NewAccrualStab("localhost:8090", endpRedis)
 
 	//////////////////////
 	// Start services

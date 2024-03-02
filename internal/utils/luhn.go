@@ -1,4 +1,4 @@
-package handlers
+package utils
 
 func LuhnValid(number int) bool {
 	return (number%10+checksum(number/10))%10 == 0

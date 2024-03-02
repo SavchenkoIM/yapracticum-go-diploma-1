@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/jackc/pgerrcode"
 	"golang.org/x/crypto/scrypt"
 	"io"
 	"strings"
@@ -24,7 +25,7 @@ func (s *Storage) UserRegister(ctx context.Context, login string, password strin
 	query := `INSERT INTO users (login, password, salt) VALUES ($1, $2, $3)`
 
 	if _, err = s.dbConn.Exec(ctx, query, login, hex.EncodeToString(hash), hex.EncodeToString(salt)); err != nil {
-		if strings.Contains(err.Error(), "(SQLSTATE 23505)") {
+		if strings.Contains(err.Error(), pgerrcode.UniqueViolation) {
 			s.logger.Sugar().Errorf("Login %s already exists in database", login)
 			return fmt.Errorf("%s: %w", err.Error(), ErrUserAlreadyExists)
 		}
@@ -38,7 +39,7 @@ func (s *Storage) UserCheckLoggedIn(token string) (string, error) {
 	ac := AuthClaims{}
 	err := ac.SetFromJWT(token, s.encKey)
 	if err != nil {
-		return "", err
+		return "", ErrUserNotLoggedIn
 	}
 
 	return ac.UserID, nil
