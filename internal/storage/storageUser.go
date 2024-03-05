@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/scrypt"
 	"io"
 	"strings"
+	"yapracticum-go-diploma-1/internal/utils"
 )
 
 func (s *Storage) UserRegister(ctx context.Context, login string, password string) error {
@@ -36,7 +37,7 @@ func (s *Storage) UserRegister(ctx context.Context, login string, password strin
 }
 
 func (s *Storage) UserCheckLoggedIn(token string) (string, error) {
-	ac := AuthClaims{}
+	ac := utils.AuthClaims{}
 	err := ac.SetFromJWT(token, s.encKey)
 	if err != nil {
 		return "", ErrUserNotLoggedIn
@@ -71,7 +72,7 @@ func (s *Storage) UserLogin(ctx context.Context, login string, password string) 
 		return "", ErrUserAuthFailed
 	}
 
-	ac := AuthClaims{UserID: sUserID}
+	ac := utils.AuthClaims{UserID: sUserID}
 	jwt, err := ac.GetJWT(s.encKey)
 	if err != nil {
 		return "", err

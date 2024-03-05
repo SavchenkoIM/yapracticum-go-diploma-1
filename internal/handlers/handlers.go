@@ -13,6 +13,7 @@ import (
 	"time"
 	"yapracticum-go-diploma-1/internal/config"
 	"yapracticum-go-diploma-1/internal/storage"
+	"yapracticum-go-diploma-1/internal/utils"
 )
 
 type Handlers struct {
@@ -111,7 +112,7 @@ func (h *Handlers) UserLogin(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:    "session_token",
 		Value:   token,
-		Expires: time.Now().Add(storage.TokenExp).Add(time.Hour), // Cookie expires a hour after token
+		Expires: time.Now().Add(utils.TokenExp).Add(time.Hour), // Cookie expires a hour after token
 	})
 	w.WriteHeader(http.StatusOK)
 

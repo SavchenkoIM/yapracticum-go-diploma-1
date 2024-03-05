@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"time"
 )
 
 type Config struct {
@@ -10,6 +11,7 @@ type Config struct {
 	Endpoint       string
 	AccrualAddress string
 	UseLuhn        bool
+	AutoInitPeriod time.Duration
 }
 
 func New() Config {
@@ -31,6 +33,7 @@ func New() Config {
 		pAccrualAddress = &val
 	}
 
+	res.AutoInitPeriod = 15 * time.Second
 	res.ConnString = *pConnString
 	res.Endpoint = *pEndpoint
 	res.AccrualAddress = *pAccrualAddress

@@ -39,8 +39,7 @@ func main() {
 	ccw := utils.NewCtxCancelWaiter(parentContext, 0)
 	accrualPoll := accrualpoll.NewAccrualPollWorker(ccw, dbStorage, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
 	accrualPoll.StartPoll(5)
-
-	go accrualpoll.GetUnhandledOrders(parentContext, dbStorage, &workersWg, logger, newOrdersCh)
+	go accrualPoll.GetUnhandledOrders(parentContext)
 
 	h := handlers.Handlers{Logger: logger, DBStorage: dbStorage, Cfg: cfg}
 	server := http.Server{Addr: cfg.Endpoint, Handler: handlers.GophermartRouter(h)}

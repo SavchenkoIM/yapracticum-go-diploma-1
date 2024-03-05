@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
+	"strconv"
 	"testing"
 	"yapracticum-go-diploma-1/internal/config"
 
@@ -25,14 +27,19 @@ type StorageTestSuite struct {
 
 func (sts *StorageTestSuite) SetupTest() {
 
-	storageContainer := testhelpers.NewTestDatabase(sts.T())
-
-	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(sts.T()))
-	//connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", "localhost", 5432)
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	store, _ := New(config.Config{ConnString: connstring, UseLuhn: true}, logger, make(chan OrderTag, 1000))
+	store, err := New(config.Config{ConnString: "jfglwekflw", UseLuhn: true}, logger, make(chan OrderTag, 20))
+	require.Error(sts.T(), err)
+
+	store, err = New(config.Config{ConnString: "postgresql://localhost:67787/postgres?user=postgres&password=postgres", UseLuhn: true}, logger, make(chan OrderTag, 5))
+	require.Error(sts.T(), err)
+
+	storageContainer := testhelpers.NewTestDatabase(sts.T())
+	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(sts.T()))
+
+	store, _ = New(config.Config{ConnString: connstring, UseLuhn: true}, logger, make(chan OrderTag, 20))
 	err = store.Init(context.Background())
 	require.NoError(sts.T(), err)
 
@@ -41,6 +48,7 @@ func (sts *StorageTestSuite) SetupTest() {
 }
 
 func (sts *StorageTestSuite) TearDownTest() {
+	sts.TestStorager.Close(context.Background())
 	sts.container.Close(sts.T())
 }
 
@@ -52,6 +60,53 @@ func TestStorageTestSuite(t *testing.T) {
 
 	t.Parallel()
 	suite.Run(t, new(StorageTestSuite))
+}
+
+func (sts *StorageTestSuite) Test_DTypes() {
+	// Numeric
+	sts.Run(`DType Numeric JSON Marshal`, func() {
+		n := Numeric(25000)
+		nJSON, err := json.Marshal(&n)
+		require.NoError(sts.T(), err)
+		assert.JSONEq(sts.T(), `250`, string(nJSON))
+	})
+	sts.Run(`DType Numeric Correct JSON UnMarshal`, func() {
+		n := Numeric(0)
+		err := json.Unmarshal([]byte("400"), &n)
+		require.NoError(sts.T(), err)
+		assert.Equal(sts.T(), 40000, int(n))
+	})
+	sts.Run(`DType Numeric Incorrect JSON UnMarshal`, func() {
+		n := Numeric(0)
+		err := json.Unmarshal([]byte("4d0"), &n)
+		require.Error(sts.T(), err)
+	})
+
+	// OrderStatus
+	sts.Run(`DType OrderStatus Incorrect JSON Marshal`, func() {
+		n := OrderStatus(10)
+		nJSON, err := json.Marshal(&n)
+		require.NoError(sts.T(), err)
+		assert.Equal(sts.T(), `"UNKNOWN!!!"`, string(nJSON))
+	})
+	sts.Run(`DType OrderStatus PROCESSING JSON Marshal`, func() {
+		n := OrderStatus(StatusProcessing)
+		nJSON, err := json.Marshal(&n)
+		require.NoError(sts.T(), err)
+		assert.Equal(sts.T(), `"PROCESSING"`, string(nJSON))
+	})
+	sts.Run(`DType OrderStatus INVALID JSON Marshal`, func() {
+		n := OrderStatus(StatusInvalid)
+		nJSON, err := json.Marshal(&n)
+		require.NoError(sts.T(), err)
+		assert.Equal(sts.T(), `"INVALID"`, string(nJSON))
+	})
+	sts.Run(`DType OrderStatus NEW JSON Marshal`, func() {
+		n := OrderStatus(StatusNew)
+		nJSON, err := json.Marshal(&n)
+		require.NoError(sts.T(), err)
+		assert.Equal(sts.T(), `"NEW"`, string(nJSON))
+	})
 }
 
 func (sts *StorageTestSuite) Test_End_To_End() {
@@ -189,6 +244,22 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 		}
 	})
 
+	sts.Run(`Add More Orders Than Channel Cap`, func() {
+		or, _ := sts.TestStorager.GetOrdersData(ctx, userID)
+		nOrders := len(or.Orders)
+
+		cfg := sts.TestStorager.getConfig()
+		cfg.UseLuhn = false
+		sts.TestStorager.setConfig(cfg)
+		for i := 40000; i < 40100; i++ {
+			err = sts.TestStorager.OrderAddNew(ctx, userID, strconv.Itoa(i))
+			assert.NoError(sts.T(), err)
+		}
+
+		or, _ = sts.TestStorager.GetOrdersData(ctx, userID)
+		assert.Equal(sts.T(), nOrders+100, len(or.Orders))
+	})
+
 	/////////////////////////////
 	// Withdraw and check balance
 	/////////////////////////////
@@ -297,4 +368,14 @@ func (sts *StorageTestSuite) Test_End_To_End() {
 		}
 	})
 
+	/////////////////////////////
+	// Cancelled context
+	/////////////////////////////
+
+	ctxWCancel, cancel := context.WithCancel(context.Background())
+	cancel()
+	sts.Run(`Get Withdrawals CancelledCtx`, func() {
+		_, err = sts.TestStorager.GetWithdrawalsData(ctxWCancel, userID)
+		assert.Error(sts.T(), err)
+	})
 }

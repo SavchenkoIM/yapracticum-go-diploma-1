@@ -14,12 +14,16 @@ import (
 )
 
 type AccrualPollWorker struct {
-	s              *storage.Storage
-	wg             *sync.WaitGroup
-	logger         *zap.Logger
-	accrualAddress string
-	data           chan storage.OrderTag
-	ccw            *utils.CtxCancelWaiter
+	s               *storage.Storage
+	wg              *sync.WaitGroup
+	logger          *zap.Logger
+	accrualAddress  string
+	data            chan storage.OrderTag
+	ccw             *utils.CtxCancelWaiter
+	dbPollPeriod    time.Duration
+	orderPollPeriod time.Duration
+	lastDBPoll      time.Time
+	lastDBPollM     *sync.RWMutex
 }
 
 func NewAccrualPollWorker(
@@ -29,13 +33,20 @@ func NewAccrualPollWorker(
 	logger *zap.Logger,
 	accrualAddress string,
 	data chan storage.OrderTag) *AccrualPollWorker {
+	if cap(data) < 10 {
+		panic("Channel for processing orders must be buffered with capacity >= 10")
+	}
 	return &AccrualPollWorker{
-		s:              s,
-		wg:             wg,
-		logger:         logger,
-		accrualAddress: accrualAddress,
-		data:           data,
-		ccw:            ccw,
+		s:               s,
+		wg:              wg,
+		logger:          logger,
+		accrualAddress:  accrualAddress,
+		data:            data,
+		ccw:             ccw,
+		dbPollPeriod:    time.Minute,
+		orderPollPeriod: 5 * time.Second,
+		lastDBPoll:      time.Now().Add(-time.Second),
+		lastDBPollM:     &sync.RWMutex{},
 	}
 }
 
@@ -53,6 +64,8 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 		apw.wg.Done()
 	}()
 
+	var lastPoll time.Time
+
 	for {
 
 		if apw.ccw.Scan() != nil {
@@ -63,8 +76,17 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 		select {
 		case order := <-apw.data:
 
+			// Will poll later
 			if order.PollAfter.After(time.Now()) {
 				apw.data <- order
+				continue
+			}
+			// OrderTag Expired! (It's copy already pulled from database)
+			apw.lastDBPollM.RLock()
+			lastPoll = apw.lastDBPoll
+			apw.lastDBPollM.RUnlock()
+			if order.IssuedAt.Before(lastPoll) {
+				apw.logger.Sugar().Infof("Skip order %s, Issued: %v, Now: %v", order.OrderNum, order.IssuedAt, time.Now())
 				continue
 			}
 
@@ -97,7 +119,7 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 				}
 
 				if (respParsed.Status != "PROCESSED" && respParsed.Status != "INVALID") || err != nil {
-					apw.data <- storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(5 * time.Second)}
+					apw.data <- storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(apw.orderPollPeriod), IssuedAt: order.IssuedAt}
 				}
 
 			case http.StatusTooManyRequests:
@@ -113,41 +135,49 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 				apw.logger.Sugar().Errorf("Unexpected Accrual response code: %d, body: %s", resp.StatusCode, respData)
 			}
 		default:
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 
 		}
 	}
 }
 
-func GetUnhandledOrders(ctx context.Context, s *storage.Storage, wg *sync.WaitGroup, logger *zap.Logger, data chan storage.OrderTag) {
-	wg.Add(1)
-	logger.Info("GetUnhandledOrders worker started")
+func (apw *AccrualPollWorker) GetUnhandledOrders(ctx context.Context) {
+	apw.wg.Add(1)
+	apw.logger.Info("GetUnhandledOrders worker started")
 	defer func() {
-		logger.Info("GetUnhandledOrders worker stopped")
-		wg.Done()
+		apw.logger.Info("GetUnhandledOrders worker stopped")
+		apw.wg.Done()
 	}()
 
-	ccw := utils.NewCtxCancelWaiter(ctx, 30*time.Minute)
+	var iTime time.Time
+
+	ccw := utils.NewCtxCancelWaiter(ctx, apw.dbPollPeriod)
 	for {
 		if ccw.Scan() != nil {
 			return
 		}
 
-		orders, err := s.GetUnhandledOrders(ccw.Ctx)
+		orders, err := apw.s.GetUnhandledOrders(ccw.Ctx)
 		if err != nil {
 			continue
 		}
 
+		apw.logger.Info("Pull orders from database")
 		if l := len(orders.Orders); l > 0 {
-			logger.Sugar().Warnf("Found %d unhandled orders", l)
+			apw.logger.Sugar().Warnf("Found %d unhandled orders", l)
 		}
 
+		iTime = time.Now()
+		apw.lastDBPollM.Lock()
+		apw.lastDBPoll = iTime
+		apw.lastDBPollM.Unlock()
 		for _, v := range orders.Orders {
 			v := v
-			select {
-			case data <- storage.OrderTag{OrderNum: v.Number, PollAfter: time.Now()}:
-			default:
-			}
+			//select {
+			//case
+			apw.data <- storage.OrderTag{OrderNum: v.Number, PollAfter: iTime, IssuedAt: iTime}
+			// default: Must push all data to channel. If not enough time, service overloaded.
+			//}
 		}
 	}
 

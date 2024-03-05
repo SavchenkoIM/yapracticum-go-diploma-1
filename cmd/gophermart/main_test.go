@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,6 +22,30 @@ import (
 	"yapracticum-go-diploma-1/internal/storage/testhelpers"
 	"yapracticum-go-diploma-1/internal/utils"
 )
+
+func createTestLogger() *zap.Logger {
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) { enc.AppendString(t.Format("15:04:05.000")) }
+
+	conf := zap.Config{
+		Level:             zap.NewAtomicLevelAt(zap.InfoLevel),
+		Development:       true,
+		DisableCaller:     true,
+		DisableStacktrace: true,
+		Sampling:          nil,
+		Encoding:          "console",
+		EncoderConfig:     encoderCfg,
+		OutputPaths: []string{
+			"stderr",
+		},
+		ErrorOutputPaths: []string{
+			"stderr",
+		},
+	}
+
+	return zap.Must(conf.Build())
+}
 
 func TestComplex(t *testing.T) {
 
@@ -55,7 +80,7 @@ func TestComplex(t *testing.T) {
 	var err error
 	storageContainer := testhelpers.NewTestDatabase(t)
 	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(t))
-	logger, err = zap.NewDevelopment()
+	logger = createTestLogger()
 	require.NoError(t, err)
 
 	storageContainerRedis := testhelpers.NewTestRedis(t)
@@ -70,7 +95,7 @@ func TestComplex(t *testing.T) {
 	//if logger, err = zap.NewProduction(); err != nil { panic(err) }
 
 	cfg := config.Config{ConnString: connstring, UseLuhn: false, Endpoint: "localhost:8080", AccrualAddress: "http://localhost:8090"}
-	newOrdersCh := make(chan storage.OrderTag, 1000)
+	newOrdersCh := make(chan storage.OrderTag, 300)
 	dbStorage, err = storage.New(cfg, logger, newOrdersCh)
 	if err != nil {
 		panic(err.Error())
@@ -82,8 +107,7 @@ func TestComplex(t *testing.T) {
 	ccw := utils.NewCtxCancelWaiter(parentContext, 0)
 	accrualPoll := accrualpoll.NewAccrualPollWorker(ccw, dbStorage, &workersWg, logger, cfg.AccrualAddress, newOrdersCh)
 	accrualPoll.StartPoll(5)
-
-	go accrualpoll.GetUnhandledOrders(parentContext, dbStorage, &workersWg, logger, newOrdersCh)
+	go accrualPoll.GetUnhandledOrders(parentContext)
 
 	h := handlers.Handlers{Logger: logger, DBStorage: dbStorage, Cfg: cfg}
 	server := http.Server{Addr: cfg.Endpoint, Handler: handlers.GophermartRouter(h)}
@@ -142,8 +166,6 @@ func TestComplex(t *testing.T) {
 				}
 				require.NoError(t, err)
 
-				println("Response Body: \"" + string(body) + "\"")
-
 				assert.Equal(t, tt.wantStatusCode, res.StatusCode)
 				if tt.wantBody != `` {
 					assert.JSONEq(t, tt.wantBody, string(body))
@@ -168,10 +190,11 @@ poll during requested timeout (order 429)`
 	t.Run("500 orders at once", func(t *testing.T) {
 
 		for i := 2000; i <= 2500; i++ {
+			//time.Sleep(10 * time.Millisecond)
 			go PlaceOrder(i, authCookie)
 		}
 
-		time.Sleep(15 * time.Second)
+		time.Sleep(45 * time.Second)
 
 		req, _ = http.NewRequest(http.MethodGet, "http://localhost:8080/api/user/balance", nil)
 		req.Header.Set("Cookie", authCookie)

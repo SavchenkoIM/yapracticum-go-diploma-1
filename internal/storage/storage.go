@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"sync"
-	"time"
 	"yapracticum-go-diploma-1/internal/config"
 	"yapracticum-go-diploma-1/internal/utils"
 )
@@ -44,6 +43,10 @@ func New(config config.Config, logger *zap.Logger, newOrdersCh chan OrderTag) (*
 	_, err := rand.Read(encKey)
 	if err != nil {
 		return nil, err
+	}
+
+	if cap(newOrdersCh) < 10 {
+		return nil, errors.New("channel for processing orders must be buffered with capacity >= 10")
 	}
 
 	s := Storage{
@@ -115,7 +118,7 @@ func (s *Storage) autoInit(ctx context.Context) {
 	defer func() { s.workersWg.Done() }()
 	connPrev := true
 	connected := false
-	cw := utils.NewCtxCancelWaiter(ctx, 15*time.Second)
+	cw := utils.NewCtxCancelWaiter(ctx, s.config.AutoInitPeriod)
 
 	for {
 		if cw.Scan() != nil {
@@ -142,7 +145,6 @@ func (s *Storage) Close(ctx context.Context) {
 }
 
 func (s *Storage) GetOrderOwner(ctx context.Context, orderNum string) string {
-
 	query := `SELECT user_id FROM orders WHERE orders.order_num = $1`
 
 	var login string
@@ -152,4 +154,11 @@ func (s *Storage) GetOrderOwner(ctx context.Context, orderNum string) string {
 		return ""
 	}
 	return login
+}
+
+func (s *Storage) setConfig(config config.Config) {
+	s.config = config
+}
+func (s *Storage) getConfig() config.Config {
+	return s.config
 }

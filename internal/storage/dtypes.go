@@ -8,9 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"yapracticum-go-diploma-1/internal/config"
 )
 
 type Storager interface {
+	setConfig(config config.Config)
+	getConfig() config.Config
 	UserRegister(context.Context, string, string) error
 	UserLogin(context.Context, string, string) (string, error)
 	UserCheckLoggedIn(string) (string, error)
@@ -21,11 +24,13 @@ type Storager interface {
 	GetWithdrawalsData(context.Context, string) (WithdrawalsInfo, error)
 	GetBalance(context.Context, string) (BalanceInfo, error)
 	ApplyAccrualResponse(context.Context, AccrualResponse) error
+	Close(ctx context.Context)
 }
 
 type OrderTag struct {
 	OrderNum  string
 	PollAfter time.Time
+	IssuedAt  time.Time
 }
 
 //////////////////////////
@@ -46,10 +51,7 @@ func (n *Numeric) FromString(text string) error {
 		return errors.New("incorrect Numeric value")
 	}
 
-	dollar, err := strconv.ParseInt(m[1], 10, 64)
-	if err != nil {
-		return err
-	}
+	dollar, _ := strconv.ParseInt(m[1], 10, 64)
 
 	var cent int64 = 0
 	cent, _ = strconv.ParseInt(strings.Replace(m[2], ".", "", 1), 10, 64)
