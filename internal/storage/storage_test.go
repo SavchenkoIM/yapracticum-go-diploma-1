@@ -30,7 +30,7 @@ func (sts *StorageTestSuite) SetupTest() {
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	_, err := New(config.Config{ConnString: "jfglwekflw", UseLuhn: true}, logger, make(chan OrderTag, 20))
+	_, err = New(config.Config{ConnString: "jfglwekflw", UseLuhn: true}, logger, make(chan OrderTag, 20))
 	require.Error(sts.T(), err)
 
 	_, err = New(config.Config{ConnString: "postgresql://localhost:67787/postgres?user=postgres&password=postgres", UseLuhn: true}, logger, make(chan OrderTag, 5))
