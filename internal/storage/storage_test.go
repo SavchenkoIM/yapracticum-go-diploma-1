@@ -30,16 +30,16 @@ func (sts *StorageTestSuite) SetupTest() {
 	logger, err := zap.NewProduction()
 	require.NoError(sts.T(), err)
 
-	store, err := New(config.Config{ConnString: "jfglwekflw", UseLuhn: true}, logger, make(chan OrderTag, 20))
+	_, err := New(config.Config{ConnString: "jfglwekflw", UseLuhn: true}, logger, make(chan OrderTag, 20))
 	require.Error(sts.T(), err)
 
-	store, err = New(config.Config{ConnString: "postgresql://localhost:67787/postgres?user=postgres&password=postgres", UseLuhn: true}, logger, make(chan OrderTag, 5))
+	_, err = New(config.Config{ConnString: "postgresql://localhost:67787/postgres?user=postgres&password=postgres", UseLuhn: true}, logger, make(chan OrderTag, 5))
 	require.Error(sts.T(), err)
 
 	storageContainer := testhelpers.NewTestDatabase(sts.T())
 	connstring := fmt.Sprintf("postgresql://%s:%d/postgres?user=postgres&password=postgres", storageContainer.Host(), storageContainer.Port(sts.T()))
 
-	store, _ = New(config.Config{ConnString: connstring, UseLuhn: true}, logger, make(chan OrderTag, 20))
+	store, _ := New(config.Config{ConnString: connstring, UseLuhn: true}, logger, make(chan OrderTag, 20))
 	err = store.Init(context.Background())
 	require.NoError(sts.T(), err)
 
