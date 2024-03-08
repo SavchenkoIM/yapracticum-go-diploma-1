@@ -1,12 +1,12 @@
 # Структура сервиса gophermart 
 
-![Scheme](https://raw.githubusercontent.com/SavchenkoIM/yapracticum-go-diploma-1/devbranch2/doc/schemeService.png)
+![Scheme](https://raw.githubusercontent.com/SavchenkoIM/yapracticum-go-diploma-1/master/doc/schemeService.png)
 
 ## База данных
 
 Сервис сохраняет данные в базу данных Postgres, схема данных приведена на рисунке:
 
-![DB Scheme](https://raw.githubusercontent.com/SavchenkoIM/yapracticum-go-diploma-1/devbranch2/doc/schemeDB.png)
+![DB Scheme](https://raw.githubusercontent.com/SavchenkoIM/yapracticum-go-diploma-1/master/doc/schemeDB.png)
 
 Финансовая информация хранится как `bigint`, на стороне приложения go обрабатывается кастомным типом данных `Numeric`
 

@@ -50,6 +50,14 @@ func NewAccrualPollWorker(
 	}
 }
 
+func (apw *AccrualPollWorker) pushTag(tag storage.OrderTag) {
+	select {
+	case apw.data <- tag:
+	default:
+		apw.logger.Sugar().Warnf("Order %s dropped by AccrualPollWorker due to high load", tag.OrderNum)
+	}
+}
+
 func (apw *AccrualPollWorker) StartPoll(numWorkers int) {
 	for i := 1; i <= numWorkers; i++ {
 		go apw.DoWork(i)
@@ -71,14 +79,12 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 		if apw.ccw.Scan() != nil {
 			return
 		}
-		//fmt.Printf("Do work, worker %d: %v\n", id, time.Now())
 
 		select {
 		case order := <-apw.data:
-
 			// Will poll later
 			if order.PollAfter.After(time.Now()) {
-				apw.data <- order
+				apw.pushTag(order)
 				continue
 			}
 			// OrderTag Expired! (It's copy already pulled from database)
@@ -94,7 +100,7 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 
 			resp, err := http.Get(fmt.Sprintf("%s/api/orders/%s", apw.accrualAddress, order.OrderNum))
 			if err != nil {
-				apw.data <- storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(5 * time.Second)}
+				apw.pushTag(storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(5 * time.Second)})
 				continue
 			}
 
@@ -109,7 +115,7 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 				var respParsed storage.AccrualResponse
 				err = json.Unmarshal(respData, &respParsed)
 				if err != nil {
-					apw.data <- storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(5 * time.Second)}
+					apw.pushTag(storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(5 * time.Second)})
 					continue
 				}
 
@@ -119,11 +125,11 @@ func (apw *AccrualPollWorker) DoWork(id int) {
 				}
 
 				if (respParsed.Status != "PROCESSED" && respParsed.Status != "INVALID") || err != nil {
-					apw.data <- storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(apw.orderPollPeriod), IssuedAt: order.IssuedAt}
+					apw.pushTag(storage.OrderTag{OrderNum: order.OrderNum, PollAfter: time.Now().Add(apw.orderPollPeriod), IssuedAt: order.IssuedAt})
 				}
 
 			case http.StatusTooManyRequests:
-				apw.data <- order
+				apw.pushTag(order)
 				raHeader := resp.Header.Get("Retry-After")
 				retryTime, err := strconv.Atoi(raHeader)
 				if err != nil {

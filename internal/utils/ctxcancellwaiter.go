@@ -41,8 +41,6 @@ func NewCtxCancelWaiter(ctx context.Context, interval time.Duration) *CtxCancelW
 func (ccw *CtxCancelWaiter) Scan() error {
 	var tUntil time.Time
 	for {
-		time.Sleep(50 * time.Millisecond)
-
 		if err := ccw.Ctx.Err(); err != nil {
 			return err
 		}
@@ -54,6 +52,8 @@ func (ccw *CtxCancelWaiter) Scan() error {
 			}
 			return nil
 		}
+
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

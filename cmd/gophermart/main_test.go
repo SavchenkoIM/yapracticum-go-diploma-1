@@ -181,10 +181,11 @@ func TestComplex(t *testing.T) {
 		err = s.Error()
 		require.Error(t, err)
 
-		errText := `poll during requested timeout (order 780348943)
-poll during requested timeout (order 429)`
+		errText := []string{`poll during requested timeout (order 780348943)
+poll during requested timeout (order 429)`, `poll during requested timeout (order 429)
+poll during requested timeout (order 780348943)`}
 
-		assert.Equal(t, err.Error(), errText)
+		assert.Contains(t, errText, err.Error())
 	})
 
 	t.Run("500 orders at once", func(t *testing.T) {
